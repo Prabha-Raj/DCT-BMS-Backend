@@ -10,6 +10,7 @@ import {
   togglePopularLibrary
 } from "../controller/libraryController.js";
 import { upload } from "../middleware/uploadMiddleware.js";
+import { adminOnly, librarianOnly, protect } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
@@ -21,19 +22,17 @@ const multiUpload = upload.fields([
 
 // Add debug middleware to log incoming requests
 router.post("/create", (req, res, next) => {
-  console.log("Incoming request body:", req.body);
   next();
 }, multiUpload, (req, res, next) => {
-  console.log("Uploaded files:", req.files);
   next();
 }, createLibrary);
 
-router.get("/for-admin", getAllLibrariesForAdmin);
+router.get("/for-admin", protect, adminOnly,getAllLibrariesForAdmin);
 router.get("/for-students", getAllLibrariesForStudents);
-router.patch("/block/:id/toggle", toggleBlockLibrary);
-router.patch("/popular/:id/toggle", togglePopularLibrary);
 router.get("/:id", getLibraryById);
-router.put("/:id", multiUpload, updateLibrary);
-router.delete("/:id/delete", deleteLibrary);
+router.put("/:id", protect, librarianOnly, multiUpload, updateLibrary);
+router.patch("/block/:id/toggle", protect, adminOnly, toggleBlockLibrary);
+router.patch("/popular/:id/toggle", protect, adminOnly, togglePopularLibrary);
+router.delete("/:id/delete", protect, adminOnly, deleteLibrary);
 
 export default router;

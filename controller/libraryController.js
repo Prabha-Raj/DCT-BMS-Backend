@@ -104,43 +104,68 @@ export const createLibrary = async (req, res) => {
 };
 
 // READ ALL for admin with pagination and filtering
+// export const getAllLibrariesForAdmin = async (req, res) => {
+//   try {
+//     const { page = 1, limit = 10, search = '', isBlocked, isPopular } = req.query;
+    
+//     const query = {};
+    
+//     if (search) {
+//       query.$or = [
+//         { libraryName: { $regex: search, $options: 'i' } },
+//         { email: { $regex: search, $options: 'i' } },
+//         { location: { $regex: search, $options: 'i' } }
+//       ];
+//     }
+    
+//     if (isBlocked !== undefined) {
+//       query.isBlocked = isBlocked === 'true';
+//     }
+    
+//     if (isPopular !== undefined) {
+//       query.isPopular = isPopular === 'true';
+//     }
+    
+//     const libraries = await Library.find(query)
+//       .populate("librarian")
+//       .populate("libraryType")
+//       .populate("services")
+//       .skip((page - 1) * limit)
+//       .limit(parseInt(limit))
+//       .sort({ createdAt: -1 });
+      
+//     const total = await Library.countDocuments(query);
+    
+//     res.status(200).json({
+//       libraries,
+//       total,
+//       page: parseInt(page),
+//       pages: Math.ceil(total / limit),
+//       success: true
+//     });
+//   } catch (error) {
+//     res.status(500).json({ 
+//       message: "Failed to fetch libraries", 
+//       error: error.message,
+//       success: false
+//     });
+//   }
+// };
+
+// READ ALL for admin without pagination and filtering
 export const getAllLibrariesForAdmin = async (req, res) => {
   try {
-    const { page = 1, limit = 10, search = '', isBlocked, isPopular } = req.query;
-    
-    const query = {};
-    
-    if (search) {
-      query.$or = [
-        { libraryName: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
-        { location: { $regex: search, $options: 'i' } }
-      ];
-    }
-    
-    if (isBlocked !== undefined) {
-      query.isBlocked = isBlocked === 'true';
-    }
-    
-    if (isPopular !== undefined) {
-      query.isPopular = isPopular === 'true';
-    }
-    
-    const libraries = await Library.find(query)
+    const libraries = await Library.find({})
       .populate("librarian")
       .populate("libraryType")
       .populate("services")
-      .skip((page - 1) * limit)
-      .limit(parseInt(limit))
       .sort({ createdAt: -1 });
-      
-    const total = await Library.countDocuments(query);
-    
+
+    const total = await Library.countDocuments();
+
     res.status(200).json({
       libraries,
       total,
-      page: parseInt(page),
-      pages: Math.ceil(total / limit),
       success: true
     });
   } catch (error) {
@@ -151,6 +176,8 @@ export const getAllLibrariesForAdmin = async (req, res) => {
     });
   }
 };
+
+
 
 // get all libraries for students with filtering
 export const getAllLibrariesForStudents = async (req, res) => {
