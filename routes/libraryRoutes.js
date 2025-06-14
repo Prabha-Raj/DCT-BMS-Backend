@@ -10,12 +10,21 @@ import { upload } from "../middleware/uploadMiddleware.js";
 
 const router = express.Router();
 
+// Configure Multer for multiple file uploads
 const multiUpload = upload.fields([
   { name: "logo", maxCount: 1 },
-  { name: "images", maxCount: 10 },
+  { name: "images", maxCount: 10 }
 ]);
 
-router.post("/", multiUpload, createLibrary);
+// Add debug middleware to log incoming requests
+router.post("/create", (req, res, next) => {
+  console.log("Incoming request body:", req.body);
+  next();
+}, multiUpload, (req, res, next) => {
+  console.log("Uploaded files:", req.files);
+  next();
+}, createLibrary);
+
 router.get("/", getAllLibraries);
 router.get("/:id", getLibraryById);
 router.put("/:id", multiUpload, updateLibrary);
