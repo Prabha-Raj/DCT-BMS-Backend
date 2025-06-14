@@ -1,6 +1,8 @@
 import Library from "../model/LibraryModel.js";
 import User from "../model/User.js";
 import bcrypt from "bcryptjs";
+import fs from 'fs';
+import path from 'path';
 
 export const createLibrary = async (req, res) => {
   try {   
@@ -12,6 +14,14 @@ export const createLibrary = async (req, res) => {
       timingTo, services, totalBooks, userMotions
     } = req.body;
    
+    // Validate required fields
+    if (!librarianName || !librarianEmail || !password || !libraryName || !libraryType) {
+      return res.status(400).json({
+        success: false,
+        message: "Required fields are missing"
+      });
+    }
+
     // Process uploaded files
     const logo = req.files["logo"]?.[0]?.filename || null;
     const images = req.files["images"]?.map(file => file.filename) || [];
@@ -19,6 +29,14 @@ export const createLibrary = async (req, res) => {
     // Check if user already exists
     const existingUser = await User.findOne({ email: librarianEmail });
     if (existingUser) {
+      // Clean up uploaded files if user exists
+      if (logo) {
+        fs.unlinkSync(path.join('uploads', logo));
+      }
+      images.forEach(image => {
+        fs.unlinkSync(path.join('uploads', image));
+      });
+      
       return res.status(400).json({
         success: false,
         message: "User with this email already exists"
@@ -51,9 +69,9 @@ export const createLibrary = async (req, res) => {
       email, 
       timingFrom,
       timingTo, 
-      services: JSON.parse(services),
-      totalBooks,
-      userMotions,
+      services: services ? JSON.parse(services) : [],
+      totalBooks: totalBooks || 0,
+      userMotions: userMotions || [],
       logo, 
       images
     });
@@ -66,6 +84,16 @@ export const createLibrary = async (req, res) => {
       success: true
     });
   } catch (error) {
+    // Clean up uploaded files if error occurs
+    if (req.files["logo"]?.[0]?.filename) {
+      fs.unlinkSync(path.join('uploads', req.files["logo"][0].filename));
+    }
+    if (req.files["images"]) {
+      req.files["images"].forEach(file => {
+        fs.unlinkSync(path.join('uploads', file.filename));
+      });
+    }
+    
     console.error("Error creating library:", error);
     res.status(500).json({ 
       message: "Failed to create library", 
@@ -75,28 +103,123 @@ export const createLibrary = async (req, res) => {
   }
 };
 
-// READ ALL
-export const getAllLibraries = async (req, res) => {
+// READ ALL for admin with pagination and filtering
+export const getAllLibrariesForAdmin = async (req, res) => {
   try {
-    const libraries = await Library.find();
-    res.status(200).json({libraries ,success:true});
+    const { page = 1, limit = 10, search = '', isBlocked, isPopular } = req.query;
+    
+    const query = {};
+    
+    if (search) {
+      query.$or = [
+        { libraryName: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+        { location: { $regex: search, $options: 'i' } }
+      ];
+    }
+    
+    if (isBlocked !== undefined) {
+      query.isBlocked = isBlocked === 'true';
+    }
+    
+    if (isPopular !== undefined) {
+      query.isPopular = isPopular === 'true';
+    }
+    
+    const libraries = await Library.find(query)
+      .populate("librarian")
+      .populate("libraryType")
+      .populate("services")
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit))
+      .sort({ createdAt: -1 });
+      
+    const total = await Library.countDocuments(query);
+    
+    res.status(200).json({
+      libraries,
+      total,
+      page: parseInt(page),
+      pages: Math.ceil(total / limit),
+      success: true
+    });
   } catch (error) {
-    res.status(500).json({ message: "Failed to fetch libraries", error: error.message ,success:false});
+    res.status(500).json({ 
+      message: "Failed to fetch libraries", 
+      error: error.message,
+      success: false
+    });
   }
 };
 
-// READ ONE
+// get all libraries for students with filtering
+export const getAllLibrariesForStudents = async (req, res) => {
+  try {
+    const { search = '', libraryType, services } = req.query;
+    
+    const query = { isBlocked: false };
+    
+    if (search) {
+      query.$or = [
+        { libraryName: { $regex: search, $options: 'i' } },
+        { location: { $regex: search, $options: 'i' } }
+      ];
+    }
+    
+    if (libraryType) {
+      query.libraryType = libraryType;
+    }
+    
+    if (services) {
+      query.services = { $in: Array.isArray(services) ? services : [services] };
+    }
+    
+    const libraries = await Library.find(query)
+      .populate("libraryType")
+      .populate("services");
+      
+    res.status(200).json({
+      libraries,
+      success: true
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      message: "Failed to fetch libraries", 
+      error: error.message,
+      success: false
+    });
+  }
+};
+
+// READ ONE with detailed population
 export const getLibraryById = async (req, res) => {
   try {
-    const library = await Library.findById(req.params.id);
-    if (!library) return res.status(404).json({ message: "Library not found" });
-    res.status(200).json({library,success:true});
+    const library = await Library.findById(req.params.id)
+      .populate("librarian")
+      .populate("libraryType")
+      .populate("services");
+      
+    if (!library) {
+      return res.status(404).json({ 
+        message: "Library not found",
+        success: false
+      });
+    }
+    
+    res.status(200).json({
+      library,
+      success: true
+    });
   } catch (error) {
-    res.status(500).json({ message: "Failed to fetch library", error: error.message ,success:false });
+    res.status(500).json({ 
+      message: "Failed to fetch library", 
+      error: error.message,
+      success: false
+    });
   }
 };
 
-// UPDATE
+// UPDATE with proper file handling
 export const updateLibrary = async (req, res) => {
   try {
     const { id } = req.params;
@@ -105,13 +228,23 @@ export const updateLibrary = async (req, res) => {
     // Find the existing library first
     const existingLibrary = await Library.findById(id);
     if (!existingLibrary) {
-      return res.status(404).json({ message: "Library not found", success: false });
+      return res.status(404).json({ 
+        message: "Library not found", 
+        success: false 
+      });
     }
 
     // Handle logo update
     if (req.files["logo"]) {
+      // Delete old logo if exists
+      if (existingLibrary.logo) {
+        try {
+          fs.unlinkSync(path.join('uploads', existingLibrary.logo));
+        } catch (err) {
+          console.error("Error deleting old logo:", err);
+        }
+      }
       updateData.logo = req.files["logo"][0].filename;
-      // TODO: Delete old logo file from server if needed
     }
 
     // Handle images - combine existing and new images
@@ -126,10 +259,17 @@ export const updateLibrary = async (req, res) => {
     // Remove deleted images
     if (updateData.imagesToDelete) {
       const imagesToDelete = JSON.parse(updateData.imagesToDelete);
+      // Delete files from server
+      imagesToDelete.forEach(image => {
+        try {
+          fs.unlinkSync(path.join('uploads', image));
+        } catch (err) {
+          console.error("Error deleting image:", err);
+        }
+      });
       updatedImages = updatedImages.filter(
         img => !imagesToDelete.includes(img)
       );
-      // TODO: Delete the image files from server
     }
 
     updateData.images = updatedImages;
@@ -139,11 +279,16 @@ export const updateLibrary = async (req, res) => {
       updateData.services = JSON.parse(updateData.services);
     }
 
+    // Handle library name update
+    if (updateData.libraryName) {
+      updateData.libraryName = updateData.libraryName.trim();
+    }
+
     const library = await Library.findByIdAndUpdate(
       id,
       updateData,
       { new: true }
-    );
+    ).populate("librarian libraryType services");
 
     res.status(200).json({ 
       message: "Library updated successfully", 
@@ -151,6 +296,16 @@ export const updateLibrary = async (req, res) => {
       success: true 
     });
   } catch (error) {
+    // Clean up uploaded files if error occurs
+    if (req.files["logo"]?.[0]?.filename) {
+      fs.unlinkSync(path.join('uploads', req.files["logo"][0].filename));
+    }
+    if (req.files["images"]) {
+      req.files["images"].forEach(file => {
+        fs.unlinkSync(path.join('uploads', file.filename));
+      });
+    }
+    
     res.status(500).json({ 
       message: "Failed to update library", 
       error: error.message,
@@ -159,13 +314,110 @@ export const updateLibrary = async (req, res) => {
   }
 };
 
-// DELETE
+// DELETE with cleanup
 export const deleteLibrary = async (req, res) => {
   try {
-    const deleted = await Library.findByIdAndDelete(req.params.id);
-    if (!deleted) return res.status(404).json({ message: "Library not found" });
-    res.status(200).json({ message: "Library deleted" ,success:true});
+    const library = await Library.findById(req.params.id);
+    if (!library) {
+      return res.status(404).json({ 
+        message: "Library not found",
+        success: false
+      });
+    }
+
+    // Delete associated user
+    await User.findByIdAndDelete(library.librarian);
+
+    // Delete logo file if exists
+    if (library.logo) {
+      try {
+        fs.unlinkSync(path.join('uploads', library.logo));
+      } catch (err) {
+        console.error("Error deleting logo:", err);
+      }
+    }
+
+    // Delete image files
+    library.images.forEach(image => {
+      try {
+        fs.unlinkSync(path.join('uploads', image));
+      } catch (err) {
+        console.error("Error deleting image:", err);
+      }
+    });
+
+    // Delete the library
+    await Library.findByIdAndDelete(req.params.id);
+    
+    res.status(200).json({ 
+      message: "Library and associated user deleted successfully",
+      success: true
+    });
   } catch (error) {
-    res.status(500).json({ message: "Failed to delete library", error: error.message ,success:false});
+    res.status(500).json({ 
+      message: "Failed to delete library", 
+      error: error.message,
+      success: false
+    });
+  }
+};
+
+// Toggle block status
+export const toggleBlockLibrary = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const library = await Library.findById(id);
+    
+    if (!library) {
+      return res.status(404).json({
+        message: "Library not found",
+        success: false
+      });
+    }
+    
+    library.isBlocked = !library.isBlocked;
+    await library.save();
+    
+    res.status(200).json({
+      message: `Library ${library.isBlocked ? 'blocked' : 'unblocked'} successfully`,
+      isBlocked: library.isBlocked,
+      success: true
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Failed to toggle block status",
+      error: error.message,
+      success: false
+    });
+  }
+};
+
+// Toggle popular status
+export const togglePopularLibrary = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const library = await Library.findById(id);
+    
+    if (!library) {
+      return res.status(404).json({
+        message: "Library not found",
+        success: false
+      });
+    }
+    
+    library.isPopular = !library.isPopular;
+    await library.save();
+    
+    res.status(200).json({
+      message: `Library marked as ${library.isPopular ? 'popular' : 'not popular'} successfully`,
+      isPopular: library.isPopular,
+      success: true
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Failed to toggle popular status",
+      error: error.message,
+      success: false
+    });
   }
 };

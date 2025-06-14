@@ -1,10 +1,13 @@
 import express from "express";
 import {
   createLibrary,
-  getAllLibraries,
   getLibraryById,
   updateLibrary,
-  deleteLibrary
+  deleteLibrary,
+  getAllLibrariesForStudents,
+  getAllLibrariesForAdmin,
+  toggleBlockLibrary,
+  togglePopularLibrary
 } from "../controller/libraryController.js";
 import { upload } from "../middleware/uploadMiddleware.js";
 
@@ -25,9 +28,12 @@ router.post("/create", (req, res, next) => {
   next();
 }, createLibrary);
 
-router.get("/", getAllLibraries);
+router.get("/for-admin", getAllLibrariesForAdmin);
+router.get("/for-students", getAllLibrariesForStudents);
+router.patch("/block/:id/toggle", toggleBlockLibrary);
+router.patch("/popular/:id/toggle", togglePopularLibrary);
 router.get("/:id", getLibraryById);
 router.put("/:id", multiUpload, updateLibrary);
-router.delete("/:id", deleteLibrary);
+router.delete("/:id/delete", deleteLibrary);
 
 export default router;
