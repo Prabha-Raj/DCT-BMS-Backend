@@ -1,6 +1,5 @@
 import express from "express";
-import { createFacility, deleteFacility, getAllFacilities, getAllFacilitiesAdmin, getFacilityById, toggleFacilityStatus, updateFacility } from "../controller/FacilityController.js";
-
+import { createFacility, deleteFacility, getAllFacilities, getAllFacilitiesAdmin, getFacilityById, toggleFacilityStatus, updateFacility } from "../controllers/facilityController.js";
 const router = express.Router();
 
 // Public routes

@@ -8,7 +8,7 @@ import {
   getAllLibrariesForAdmin,
   toggleBlockLibrary,
   togglePopularLibrary
-} from "../controller/libraryController.js";
+} from "../controllers/libraryController.js";
 import { upload } from "../middleware/uploadMiddleware.js";
 import { adminOnly, librarianOnly, protect } from "../middleware/authMiddleware.js";
 

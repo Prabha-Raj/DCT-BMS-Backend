@@ -1,5 +1,5 @@
 import express from "express";
-import { createLibraryType, deleteLibraryType, getAllLibraryTypes, getAllLibraryTypesAdmin, getLibraryTypeById, toggleLibraryTypeStatus, updateLibraryType } from "../controller/LibraryTypeController.js";
+import { createLibraryType, deleteLibraryType, getAllLibraryTypes, getAllLibraryTypesAdmin, getLibraryTypeById, toggleLibraryTypeStatus, updateLibraryType } from "../controllers/LibraryTypeController.js";
 
 const router = express.Router();
 

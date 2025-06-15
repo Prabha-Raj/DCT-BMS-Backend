@@ -5,7 +5,7 @@ import {
   getInquiryById,
   updateInquiry,
   deleteInquiry,
-} from "../controller/inquiryController.js";
+} from "../controllers/inquiryController.js";
 
 const router = express.Router();
 
