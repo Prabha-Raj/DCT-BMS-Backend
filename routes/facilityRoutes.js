@@ -4,9 +4,9 @@ import { createFacility, deleteFacility, getAllFacilities, getAllFacilitiesAdmin
 const router = express.Router();
 
 // Public routes
+router.post("/", createFacility);
 router.get("/", getAllFacilities);
 router.get("/:id", getFacilityById);
-router.post("/", createFacility);
 
 // Admin routes
 router.get("/admin/all", getAllFacilitiesAdmin);
