@@ -50,10 +50,8 @@ export const createUser = async (req, res) => {
   }
 };
 
-// login user
 export const loginUser = async (req, res) => {
   const { email, password, role } = req.body;
-  console.log(email, password, role)
   try {
     // Validate input
     if (!email || !password || !role) {
@@ -108,11 +106,25 @@ export const loginUser = async (req, res) => {
     // Remove password from response
     const { password: _, ...userResponse } = user.toObject();
 
+    let libraryResponse = null;
+    
+    // If user is librarian, find their library
+    if (user.role == "librarian") {
+      const library = await Library.findOne({ librarian: user._id });
+      if (library) {
+        libraryResponse = {
+          _id: library._id,
+          libraryName: library.libraryName,
+          // include any other library fields you want to send
+        };
+      }
+    }
     res.status(200).json({
       success: true,
       message: "Login successful",
       token,
       user: userResponse,
+      library: libraryResponse // will be null if not librarian or library not found
     });
 
   } catch (error) {
@@ -124,7 +136,6 @@ export const loginUser = async (req, res) => {
     });
   }
 };
-
 // Get all users
 export const getAllUsers = async (req, res) => {
   try {

@@ -7,7 +7,9 @@ import {
   getAllLibrariesForStudents,
   getAllLibrariesForAdmin,
   toggleBlockLibrary,
-  togglePopularLibrary
+  togglePopularLibrary,
+  getLibrariesByAddress,
+  getMyLibrary
 } from "../controllers/libraryController.js";
 import { upload } from "../middleware/uploadMiddleware.js";
 import { adminOnly, librarianOnly, protect } from "../middleware/authMiddleware.js";
@@ -29,10 +31,13 @@ router.post("/create", (req, res, next) => {
 
 router.get("/for-admin", protect, adminOnly,getAllLibrariesForAdmin);
 router.get("/for-students", getAllLibrariesForStudents);
+router.get('/search', getLibrariesByAddress);
+router.get("/my-library", protect, librarianOnly, getMyLibrary);
 router.get("/:id", getLibraryById);
-router.put("/:id", protect, librarianOnly, multiUpload, updateLibrary);
+router.put("/update/:id", protect, librarianOnly, multiUpload, updateLibrary);
 router.patch("/block/:id/toggle", protect, adminOnly, toggleBlockLibrary);
 router.patch("/popular/:id/toggle", protect, adminOnly, togglePopularLibrary);
 router.delete("/:id/delete", protect, adminOnly, deleteLibrary);
+
 
 export default router;

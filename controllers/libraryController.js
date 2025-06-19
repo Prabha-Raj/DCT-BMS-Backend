@@ -103,54 +103,6 @@ export const createLibrary = async (req, res) => {
   }
 };
 
-// READ ALL for admin with pagination and filtering
-// export const getAllLibrariesForAdmin = async (req, res) => {
-//   try {
-//     const { page = 1, limit = 10, search = '', isBlocked, isPopular } = req.query;
-    
-//     const query = {};
-    
-//     if (search) {
-//       query.$or = [
-//         { libraryName: { $regex: search, $options: 'i' } },
-//         { email: { $regex: search, $options: 'i' } },
-//         { location: { $regex: search, $options: 'i' } }
-//       ];
-//     }
-    
-//     if (isBlocked !== undefined) {
-//       query.isBlocked = isBlocked === 'true';
-//     }
-    
-//     if (isPopular !== undefined) {
-//       query.isPopular = isPopular === 'true';
-//     }
-    
-//     const libraries = await Library.find(query)
-//       .populate("librarian")
-//       .populate("libraryType")
-//       .populate("services")
-//       .skip((page - 1) * limit)
-//       .limit(parseInt(limit))
-//       .sort({ createdAt: -1 });
-      
-//     const total = await Library.countDocuments(query);
-    
-//     res.status(200).json({
-//       libraries,
-//       total,
-//       page: parseInt(page),
-//       pages: Math.ceil(total / limit),
-//       success: true
-//     });
-//   } catch (error) {
-//     res.status(500).json({ 
-//       message: "Failed to fetch libraries", 
-//       error: error.message,
-//       success: false
-//     });
-//   }
-// };
 
 // READ ALL for admin without pagination and filtering
 export const getAllLibrariesForAdmin = async (req, res) => {
@@ -245,6 +197,45 @@ export const getLibraryById = async (req, res) => {
     });
   }
 };
+
+
+export const getMyLibrary = async (req, res) => {
+  try {
+    const userId = req.user?._id;
+
+    if (!userId) {
+      return res.status(401).json({
+        message: "Unauthorized: No user ID found in request",
+        success: false,
+      });
+    }
+
+    const library = await Library.findOne({ librarian: userId })
+      .populate("librarian", "-password") // don't return password
+      .populate("libraryType")
+      .populate("services");
+
+    if (!library) {
+      return res.status(404).json({
+        message: "Library not found",
+        success: false,
+      });
+    }
+
+    return res.status(200).json({
+      library,
+      success: true,
+    });
+  } catch (error) {
+    console.error("getMyLibrary error:", error.message);
+    return res.status(500).json({
+      message: "Failed to fetch library",
+      error: error.message,
+      success: false,
+    });
+  }
+};
+
 
 // UPDATE with proper file handling
 export const updateLibrary = async (req, res) => {
@@ -446,5 +437,27 @@ export const togglePopularLibrary = async (req, res) => {
       error: error.message,
       success: false
     });
+  }
+};
+
+
+// GET /api/libraries/search?address=Delhi
+export const getLibrariesByAddress = async (req, res) => {
+  try {
+    const { address } = req.query;
+
+    if (!address) {
+      return res.status(400).json({ message: 'Address query is required' });
+    }
+
+    // Case-insensitive, partial match using regex
+    const libraries = await Library.find({
+      location: { $regex: address, $options: 'i' }
+    }).populate('libraryType').populate('services');
+
+    res.status(200).json(libraries);
+  } catch (error) {
+    console.error('Error fetching libraries by address:', error);
+    res.status(500).json({ message: 'Server error' });
   }
 };
