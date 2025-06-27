@@ -4,6 +4,8 @@ import qr from "qr-image";
 import Reservation from "../model/Reservation.js";
 import Seat from "../model/Seat.js";
 import User from "../model/User.js"; // Assuming you have a User model
+import Wallet from "../model/Wallet.js";
+import Transaction from "../model/Transaction.js";
 
 // Helper function to generate QR code
 const generateQRCode = (reservationData) => {
@@ -138,68 +140,84 @@ const validateReservationDates = (startDate, endDate) => {
   };
 };
 
-// Create a new reservation
+
+
 export const createReservation = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
-    const { student, library, seat, timeSlot, startDate, endDate } = req.body;
-
-    // Validate input data
+    const { library, seat, timeSlot, startDate, endDate } = req.body;
+    const student = req.user._id
+    // Validate input
     if (!student || !library || !seat || !timeSlot || !startDate || !endDate) {
       await session.abortTransaction();
       return res.status(400).json({ message: "Missing required fields" });
     }
 
-    // Validate dates
     const dateValidation = validateReservationDates(startDate, endDate);
     if (!dateValidation.valid) {
       await session.abortTransaction();
       return res.status(400).json({ message: dateValidation.message });
     }
 
-    // Check if user exists and is a student
+    // Validate student
     const user = await User.findById(student).session(session);
-    if (!user || user.role !== 'student') {
+    if (!user || user.role !== "student") {
       await session.abortTransaction();
       return res.status(400).json({ message: "Invalid student user" });
     }
 
-    // Check seat exists and is active
+    // Validate seat
     const seatDoc = await Seat.findById(seat).session(session);
-    if (!seatDoc) {
+    if (!seatDoc || !seatDoc.isActive) {
       await session.abortTransaction();
-      return res.status(404).json({ message: "Seat not found" });
-    }
-    if (!seatDoc.isActive) {
-      await session.abortTransaction();
-      return res.status(400).json({ message: "Seat is not active" });
+      return res.status(400).json({ message: "Invalid or inactive seat" });
     }
 
-    // Verify time slot exists in the seat
     const timeSlotDoc = seatDoc.timeSlots.id(timeSlot);
     if (!timeSlotDoc) {
       await session.abortTransaction();
-      return res.status(400).json({ message: "Specified time slot not available for this seat" });
+      return res.status(400).json({ message: "Specified time slot not found" });
     }
 
-    // Check if time slot is already booked
     if (timeSlotDoc.isBooked) {
       await session.abortTransaction();
-      return res.status(400).json({ 
-        message: "Time slot already booked",
-        bookedBy: timeSlotDoc.bookedBy 
-      });
+      return res.status(400).json({ message: "Time slot already booked", bookedBy: timeSlotDoc.bookedBy });
     }
 
-    // Check for booking conflicts
+    // Check for booking conflict
     if (await hasBookingConflict(seat, timeSlot, startDate, endDate)) {
       await session.abortTransaction();
       return res.status(400).json({ message: "Time slot is already booked for the selected date range" });
     }
 
-    // Generate QR code
+    // 🔻 NEW: Wallet deduction
+    const wallet = await Wallet.findOne({ user: student }).session(session);
+    if (!wallet) {
+      await session.abortTransaction();
+      return res.status(400).json({ message: "Wallet not found" });
+    }
+
+    const slotPrice = timeSlotDoc.price; // Ensure your timeSlot schema includes `price`
+    if (wallet.balance < slotPrice) {
+      await session.abortTransaction();
+      return res.status(400).json({ message: "Insufficient wallet balance" });
+    }
+
+    wallet.balance -= slotPrice;
+    await wallet.save({ session });
+
+    // 🔻 NEW: Create debit transaction
+    await Transaction.create([{
+      wallet: wallet._id,
+      user: student,
+      type: "debit",
+      amount: slotPrice,
+      description: `Seat booking for time slot ${timeSlotDoc.startTime} - ${timeSlotDoc.endTime}`
+    }], { session });
+
+    // Generate QR Code
     const qrCode = generateQRCode({
       _id: new mongoose.Types.ObjectId(),
       student,
@@ -232,14 +250,12 @@ export const createReservation = async (req, res) => {
     });
 
     // Book the time slot
-    await updateTimeSlotBooking(seat, timeSlot, student, true);
+    await updateTimeSlotBooking(seat, timeSlot, student, true, session);
 
-    // Save reservation
     await reservation.save({ session });
 
     await session.commitTransaction();
 
-    // Populate and return the response
     const populatedReservation = await Reservation.findById(reservation._id)
       .populate('student', 'name email')
       .populate('library', 'name location')
@@ -254,10 +270,7 @@ export const createReservation = async (req, res) => {
   } catch (error) {
     await session.abortTransaction();
     console.error("Reservation creation error:", error);
-    res.status(500).json({ 
-      message: "Failed to create reservation",
-      error: error.message 
-    });
+    res.status(500).json({ message: "Failed to create reservation", error: error.message });
   } finally {
     session.endSession();
   }

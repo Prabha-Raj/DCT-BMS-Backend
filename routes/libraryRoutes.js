@@ -9,7 +9,9 @@ import {
   toggleBlockLibrary,
   togglePopularLibrary,
   getLibrariesByAddress,
-  getMyLibrary
+  getMyLibrary,
+  getNearestLibrariesByPinCode,
+  getNearestLibrariesByLatLon
 } from "../controllers/libraryController.js";
 import { upload } from "../middleware/uploadMiddleware.js";
 import { adminOnly, librarianOnly, protect } from "../middleware/authMiddleware.js";
@@ -32,6 +34,8 @@ router.post("/create", (req, res, next) => {
 router.get("/for-admin", protect, adminOnly,getAllLibrariesForAdmin);
 router.get("/for-students", getAllLibrariesForStudents);
 router.get('/search', getLibrariesByAddress);
+router.get('/nearme', getNearestLibrariesByLatLon);
+router.get('/:pincode/nearest', getNearestLibrariesByPinCode);
 router.get("/my-library", protect, librarianOnly, getMyLibrary);
 router.get("/:id", getLibraryById);
 router.put("/update/:id", protect, librarianOnly, multiUpload, updateLibrary);

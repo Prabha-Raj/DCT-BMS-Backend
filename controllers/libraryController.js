@@ -3,19 +3,20 @@ import User from "../model/User.js";
 import bcrypt from "bcryptjs";
 import fs from 'fs';
 import path from 'path';
+import { findDistanceBetweenLatAndLon, findDistanceBetweenPins, getLatLngFromAddress } from "../services/locationService.js";
 
 export const createLibrary = async (req, res) => {
   try {   
     // Destructure all fields from the request body
     const {
       librarianName, librarianEmail, librarianMobile, password,
-      libraryName, libraryType, description, location,
+      libraryName, libraryType, description, location,  pinCode,
       contactNumber, email, timingFrom,
       timingTo, services, totalBooks, userMotions
     } = req.body;
    
     // Validate required fields
-    if (!librarianName || !librarianEmail || !password || !libraryName || !libraryType) {
+    if (!librarianName || !librarianEmail || !password || !libraryName || !libraryType || !pinCode) {
       return res.status(400).json({
         success: false,
         message: "Required fields are missing"
@@ -65,6 +66,7 @@ export const createLibrary = async (req, res) => {
       libraryType, 
       description, 
       location,
+      pinCode,
       contactNumber, 
       email, 
       timingFrom,
@@ -458,6 +460,101 @@ export const getLibrariesByAddress = async (req, res) => {
     res.status(200).json(libraries);
   } catch (error) {
     console.error('Error fetching libraries by address:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+
+export const getNearestLibrariesByPinCode = async (req, res) => {
+  const { pincode } = req.params;
+  const userPinCode = pincode;
+
+  if (!userPinCode) {
+    return res.status(400).json({ message: 'User PIN code is required' });
+  }
+
+  try {
+
+
+    const libraries = await Library.find({ isBlocked: false })
+      .populate('libraryType')
+      .populate('services');
+
+    const enrichedLibraries = [];
+
+    for (const library of libraries) {
+      if (!library.pinCode) continue;
+
+      try {
+      //  console.log(userPinCode,library.pinCode)
+        const distance = await findDistanceBetweenPins(userPinCode,library.pinCode);
+        console.log("dis", distance)
+        enrichedLibraries.push({
+          ...library._doc,
+          distanceInKm: distance,
+        });
+
+      } catch (err) {
+        console.warn(`Skipping library with pin ${library.pinCode}:`, err.message);
+      }
+    }
+
+    enrichedLibraries.sort((a, b) => a.distanceInKm - b.distanceInKm);
+
+    res.status(200).json(enrichedLibraries);
+
+  } catch (error) {
+    console.error('❌ Error in nearest libraries:', error.message);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+export const getNearestLibrariesByLatLon = async (req, res) => {
+  let { userLat, userLon } = req.body;
+
+  // Convert to number (if sent as string)
+  userLat = parseFloat(userLat);
+  userLon = parseFloat(userLon);
+
+  if (!userLat || !userLon) {
+    return res.status(400).json({ message: 'User latitude and longitude are required' });
+  }
+
+  try {
+    const libraries = await Library.find({ isBlocked: false })
+      .populate('libraryType')
+      .populate('services');
+
+    const enrichedLibraries = [];
+
+    for (const library of libraries) {
+      if (!library.location) continue;
+
+      try {
+        const libLocation = await getLatLngFromAddress(library.location);
+        if (!libLocation || !libLocation.lat || !libLocation.lon) {
+          console.warn(`No lat/lon for address: ${library.location}`);
+          continue;
+        }
+
+        const distance = await findDistanceBetweenLatAndLon(userLat, userLon, libLocation.lat, libLocation.lon);
+
+        enrichedLibraries.push({
+          ...library._doc,
+          distanceInKm: Number(distance.toFixed(2)),
+        });
+
+      } catch (err) {
+        console.warn(`Skipping library [${library.libraryName}] due to error:`, err.message);
+      }
+    }
+
+    enrichedLibraries.sort((a, b) => a.distanceInKm - b.distanceInKm);
+
+    res.status(200).json(enrichedLibraries);
+
+  } catch (error) {
+    console.error('❌ Error in nearest libraries:', error.message);
     res.status(500).json({ message: 'Server error' });
   }
 };

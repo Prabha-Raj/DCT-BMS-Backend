@@ -2,9 +2,8 @@ import Library from "../model/LibraryModel.js";
 import User from "../model/User.js"; // Adjust path as needed
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import Wallet from "../model/Wallet.js";
 
-
-// Create a new user
 export const createUser = async (req, res) => {
   try {
     const { name, email, mobile, password, role } = req.body;
@@ -28,10 +27,19 @@ export const createUser = async (req, res) => {
       email,
       mobile,
       password: hashedPassword,
-      role: role || "student" // Use provided role or default to student
+      role: role || "student" // Default to student if role not provided
     });
 
     const savedUser = await newUser.save();
+
+    // Create wallet only if user is a student
+    if (savedUser.role === "student") {
+      const newWallet = new Wallet({
+        user: savedUser._id,
+        balance: 0 // Default balance
+      });
+      await newWallet.save();
+    }
 
     // Remove password from response
     const { password: _, ...userResponse } = savedUser.toObject();
@@ -39,19 +47,20 @@ export const createUser = async (req, res) => {
     res.status(201).json({
       success: true,
       message: "User created successfully",
-      data: userResponse,
+      data: userResponse
     });
   } catch (error) {
     res.status(500).json({
       success: false,
       message: "Error creating user",
-      error: error.message,
+      error: error.message
     });
   }
 };
 
 export const loginUser = async (req, res) => {
   const { email, password, role } = req.body;
+  // console.log(email, password, role )
   try {
     // Validate input
     if (!email || !password || !role) {

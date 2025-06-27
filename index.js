@@ -11,7 +11,12 @@ import libraryTypeRoutes from "./routes/libraryTypeRoutes.js";
 import facilityRoutes from "./routes/facilityRoutes.js";
 import seatRoutes from "./routes/seatRoutes.js";
 import reservationRoutes from "./routes/reservationRoutes.js";
+import walletRoutes from "./routes/walletRoutes.js";
+import subscriptionPlanRoutes from "./routes/subscriptionPlanRoutes.js"
 
+// import { getAddressFromPostalCode, getLatLngFromPostalCode } from "./services/locationService.js";
+// getLatLngFromPostalCode("206001");
+// getAddressFromPostalCode("206001");
 
 const app = express();
 dotenv.config();
@@ -37,6 +42,10 @@ app.use("/api/facility", facilityRoutes);
 app.use("/api/library", libraryRoutes);
 app.use("/api/seat", seatRoutes);
 app.use("/api/reservation", reservationRoutes);
+app.use("/api/wallet", walletRoutes);
+app.use("/api/subscription-plan", subscriptionPlanRoutes)
+
+
 
 // Start Server
 const PORT = process.env.PORT || 4001;

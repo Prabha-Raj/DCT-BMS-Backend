@@ -9,10 +9,12 @@ import {
   getCurrentReservations,
   cancelReservation
 } from '../controllers/reservationController.js';
+import { protect, studentOnly } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
+router.use(protect);
 
-router.post('/', createReservation);
+router.post('/', studentOnly, createReservation);
 router.get('/', getAllReservations);
 router.get('/:id', getReservationById);
 router.put('/:id', updateReservation);

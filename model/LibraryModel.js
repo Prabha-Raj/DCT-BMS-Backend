@@ -21,6 +21,7 @@ const librarySchema = new mongoose.Schema({
   logo: String,
   images: [String],
   location: String,
+  pinCode:String,
   contactNumber: String,
   email: { type: String, required: true },
   timingFrom: String,
