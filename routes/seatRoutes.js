@@ -8,7 +8,7 @@ import {
     toggleSeatStatus,
     getSeatsByLibrary,
     bulkCreateSeats
-} from '../controllers/seatController.js';
+} from '../controllers/SeatController.js';
 import { librarianOnly, protect } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
