@@ -53,7 +53,9 @@ app.use("/api/transaction", transactionRoutes);
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api/stats", dashboardRoutes);
 
-
+app.use("/",(req, res)=>{
+  res.send("Backend of bookMySpace is running now...........!|.")
+})
 
 
 
