@@ -34,6 +34,10 @@ const librarySchema = new mongoose.Schema({
   isPopular: {
     type: Boolean,
     default: false
+  },
+   qrCode: {
+    type: String,
+    default: null
   }
 }, {
   timestamps: true

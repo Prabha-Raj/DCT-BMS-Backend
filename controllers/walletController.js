@@ -51,6 +51,7 @@ export const addMoneyToWallet = async (req, res) => {
       user: userId,
       type: "credit",
       amount,
+      status:"completed",
       description: description || "Money added to wallet"
     });
 

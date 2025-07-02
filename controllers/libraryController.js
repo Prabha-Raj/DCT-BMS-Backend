@@ -4,6 +4,8 @@ import bcrypt from "bcryptjs";
 import fs from 'fs';
 import path from 'path';
 import { findDistanceBetweenLatAndLon, findDistanceBetweenPins, getLatLngFromAddress } from "../services/locationService.js";
+import { generateQRCode } from "../utils/qrCodeHelper.js";
+
 
 export const createLibrary = async (req, res) => {
   try {   
@@ -78,6 +80,19 @@ export const createLibrary = async (req, res) => {
       images
     });
 
+    // Generate QR code data
+    const qrCodeData = JSON.stringify({
+      libraryId: newLibrary._id,
+      libraryName,
+      contactNumber,
+      email,
+      location
+    });
+
+    // Generate and save QR code
+    const qrCodePath = await generateQRCode(qrCodeData, newLibrary._id);
+    newLibrary.qrCode = qrCodePath;
+
     await newLibrary.save();
     
     res.status(201).json({ 
@@ -104,7 +119,6 @@ export const createLibrary = async (req, res) => {
     });
   }
 };
-
 
 // READ ALL for admin without pagination and filtering
 export const getAllLibrariesForAdmin = async (req, res) => {
@@ -558,3 +572,135 @@ export const getNearestLibrariesByLatLon = async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
+
+
+// export const getLibraryQRCode = async (req, res) => {
+//   try {
+//     const id = req.user._id;
+  
+    
+//     const library = await Library.findOne({librarian:id});
+//     if (!library) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Library not found"
+//       });
+//     }
+
+//     // If QR code doesn't exist, generate it
+//     if (!library.qrCode) {
+//       const qrCodeData = JSON.stringify({
+//         libraryId: library._id,
+//         libraryName: library.libraryName,
+//         contactNumber: library.contactNumber,
+//         email: library.email,
+//         location: library.location
+//       });
+
+//       const qrCodePath = await generateQRCode(qrCodeData, library._id);
+//       library.qrCode = qrCodePath;
+//       await library.save();
+//     }
+
+//     // Return the QR code path
+//     res.status(200).json({
+//       success: true,
+//       qrCode: library.qrCode
+//     });
+//   } catch (error) {
+//     console.error("Error getting QR code:", error);
+//     res.status(500).json({
+//       success: false,
+//       message: "Failed to get QR code",
+//       error: error.message
+//     });
+//   }
+// };
+
+export const getLibraryQRCode = async (req, res) => {
+  try {
+    // Validate user exists and has librarian role
+    if (!req.user || req.user.role !== 'librarian') {
+      return res.status(403).json({
+        success: false,
+        message: "Unauthorized: Only librarians can access this resource"
+      });
+    }
+
+    const librarianId = req.user._id;
+    
+    // Find library with population of useful fields
+    const library = await Library.findOne({ librarian: librarianId })
+      .select('_id libraryName contactNumber email location qrCode')
+      .lean();
+
+    if (!library) {
+      return res.status(404).json({
+        success: false,
+        message: "Library not found for this librarian"
+      });
+    }
+
+    // Generate new QR code if doesn't exist or is invalid
+    if (!library.qrCode || !fs.existsSync(path.join('uploads', library.qrCode))) {
+      const qrCodeData = {
+        libraryId: library._id,
+        libraryName: library.libraryName,
+        contactNumber: library.contactNumber,
+        email: library.email,
+        location: library.location,
+        timestamp: new Date().toISOString()
+      };
+
+      const qrCodePath = await generateQRCode(JSON.stringify(qrCodeData), library._id);
+      
+      // Update the library document
+      await Library.updateOne(
+        { _id: library._id },
+        { $set: { qrCode: qrCodePath } }
+      );
+
+      library.qrCode = qrCodePath;
+    }
+
+    // Construct full URL for the QR code
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const qrCodeUrl = `${baseUrl}/uploads/${library.qrCode}`;
+
+    res.status(200).json({
+      success: true,
+      data: {
+        qrCodePath: library.qrCode,
+        qrCodeUrl: qrCodeUrl,
+        library: {
+          id: library._id,
+          name: library.libraryName
+        },
+        expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString() // 1 year from now
+      },
+      message: "QR code retrieved successfully"
+    });
+
+  } catch (error) {
+    console.error("Error in getLibraryQRCode:", error);
+    
+    // Differentiate between different types of errors
+    let statusCode = 500;
+    let errorMessage = "Failed to process QR code request";
+
+    if (error.name === 'ValidationError') {
+      statusCode = 400;
+      errorMessage = "Invalid data format";
+    } else if (error.code === 'ENOENT') {
+      statusCode = 404;
+      errorMessage = "QR code file not found";
+    }
+
+    res.status(statusCode).json({
+      success: false,
+      message: errorMessage,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+

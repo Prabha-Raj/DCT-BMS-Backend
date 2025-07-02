@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-const transactionSchema = new mongoose.Schema(
+const TransactionSchema = new mongoose.Schema(
   {
     wallet: {
       type: mongoose.Schema.Types.ObjectId,
@@ -25,28 +25,25 @@ const transactionSchema = new mongoose.Schema(
       type: String,
       default: ""
     },
-
-    // Context for seat booking
+    bookings: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Booking"
+      }
+    ],
     library: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Library"
     },
-    seat: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Seat"
-    },
-    slotId: {
-      type: mongoose.Schema.Types.ObjectId
-    },
-
-    date: {
-      type: Date,
-      default: Date.now
+    status: {
+      type: String,
+      enum: ["pending", "completed", "failed"],
+      default: "pending"
     }
   },
-  {
-    timestamps: true
+  { 
+    timestamps: true 
   }
 );
-
-export default mongoose.model("Transaction", transactionSchema);
+const Transaction = new mongoose.model("Transaction", TransactionSchema)
+export default Transaction;

@@ -10,9 +10,14 @@ import UserRoutes from "./routes/UserRoutes.js";
 import libraryTypeRoutes from "./routes/libraryTypeRoutes.js";
 import facilityRoutes from "./routes/facilityRoutes.js";
 import seatRoutes from "./routes/seatRoutes.js";
-import reservationRoutes from "./routes/reservationRoutes.js";
 import walletRoutes from "./routes/walletRoutes.js";
-import subscriptionPlanRoutes from "./routes/subscriptionPlanRoutes.js"
+import timeSlotRoutes from "./routes/timeSlotRoutes.js";
+import bookingRoutes from "./routes/bookingRoutes.js";
+import transactionRoutes from "./routes/transactionRoutes.js";
+import attendanceRoutes from "./routes/attendanceRoutes.js";
+import dashboardRoutes from "./routes/dashboardRoutes.js";
+
+
 
 // import { getAddressFromPostalCode, getLatLngFromPostalCode } from "./services/locationService.js";
 // getLatLngFromPostalCode("206001");
@@ -41,9 +46,14 @@ app.use("/api/library-type", libraryTypeRoutes);
 app.use("/api/facility", facilityRoutes);
 app.use("/api/library", libraryRoutes);
 app.use("/api/seat", seatRoutes);
-app.use("/api/reservation", reservationRoutes);
 app.use("/api/wallet", walletRoutes);
-app.use("/api/subscription-plan", subscriptionPlanRoutes)
+app.use("/api/timeslot", timeSlotRoutes);
+app.use("/api/booking", bookingRoutes);
+app.use("/api/transaction", transactionRoutes);
+app.use("/api/attendance", attendanceRoutes);
+app.use("/api/stats", dashboardRoutes);
+
+
 
 
 

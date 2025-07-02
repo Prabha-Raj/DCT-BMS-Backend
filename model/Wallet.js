@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-const walletSchema = new mongoose.Schema(
+const WalletSchema = new mongoose.Schema(
   {
     user: {
       type: mongoose.Schema.Types.ObjectId,
@@ -11,12 +11,25 @@ const walletSchema = new mongoose.Schema(
     balance: {
       type: Number,
       required: true,
-      default: 0
+      default: 0,
+      min: 0
+    },
+    currency: {
+      type: String,
+      default: "INR"
     }
   },
-  {
-    timestamps: true
+  { 
+    timestamps: true 
   }
 );
 
-export default mongoose.model("Wallet", walletSchema);
+// Prevent negative balance
+WalletSchema.pre('save', function(next) {
+  if (this.balance < 0) {
+    throw new Error('Balance cannot be negative');
+  }
+  next();
+});
+
+export default mongoose.model("Wallet", WalletSchema);
