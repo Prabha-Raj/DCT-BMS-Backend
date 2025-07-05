@@ -7,7 +7,7 @@ import {
   toggleTimeSlotStatus,
   deleteTimeSlot
 } from '../controllers/timeSlotController.js';
-import { protect, adminOnly } from '../middleware/authMiddleware.js';
+import { protect, librarianOnly } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
@@ -17,7 +17,7 @@ router.get('/:id', getTimeSlotById);
 
 // Protected admin routes
 router.use(protect);
-router.use(adminOnly);
+router.use(librarianOnly);
 
 router.post('/', createTimeSlot);
 router.put('/:id', updateTimeSlot);

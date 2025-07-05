@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import TimeSlot from "../model/TimeSlot.js";
 import { isValidTime, compareTimes } from "../utils/timeUtils.js";
 
-// Create a new time slot (Admin only)
+// Create a new time slot (librarian only)
 export const createTimeSlot = async (req, res) => {
   try {
     const { startTime, endTime, price } = req.body;
@@ -80,7 +80,7 @@ export const getTimeSlotById = async (req, res) => {
   }
 };
 
-// Update a time slot (Admin only)
+// Update a time slot (librarian only)
 export const updateTimeSlot = async (req, res) => {
   try {
     const { id } = req.params;

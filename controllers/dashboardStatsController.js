@@ -393,7 +393,7 @@ export const studentStats = async (req, res) => {
         .populate('timeSlot'),
       Booking.aggregate([
         {
-          $match: { user: mongoose.Types.ObjectId(studentId) }
+          $match: { user: new mongoose.Types.ObjectId(studentId) }
         },
         {
           $group: {
@@ -404,7 +404,7 @@ export const studentStats = async (req, res) => {
       ]),
       Attendance.aggregate([
         {
-          $match: { student: mongoose.Types.ObjectId(studentId) }
+          $match: { student: new mongoose.Types.ObjectId(studentId) }
         },
         {
           $group: {
@@ -417,7 +417,7 @@ export const studentStats = async (req, res) => {
       ]),
       Transaction.aggregate([
         {
-          $match: { user: mongoose.Types.ObjectId(studentId) }
+          $match: { user: new mongoose.Types.ObjectId(studentId) }
         },
         {
           $group: {

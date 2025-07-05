@@ -16,6 +16,7 @@ import bookingRoutes from "./routes/bookingRoutes.js";
 import transactionRoutes from "./routes/transactionRoutes.js";
 import attendanceRoutes from "./routes/attendanceRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
+import settingRoutes from "./routes/settingRoutes.js";
 
 
 
@@ -52,6 +53,9 @@ app.use("/api/booking", bookingRoutes);
 app.use("/api/transaction", transactionRoutes);
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api/stats", dashboardRoutes);
+app.use("/api/setting", settingRoutes);
+
+
 
 app.use("/",(req, res)=>{
   res.send("Backend of bookMySpace is running now...........!|.")
