@@ -15,7 +15,7 @@ const settingSchema = new mongoose.Schema(
     bookingCommission: {
       type: Number,
       required: true,
-      default: 0, // in percentage or fixed
+      default: 0, // in coins or fixed
     },
   },
   {

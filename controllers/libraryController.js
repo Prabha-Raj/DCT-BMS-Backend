@@ -5,6 +5,9 @@ import fs from 'fs';
 import path from 'path';
 import { findDistanceBetweenLatAndLon, findDistanceBetweenPins, getLatLngFromAddress } from "../services/locationService.js";
 import { generateQRCode } from "../utils/qrCodeHelper.js";
+import Seat from "../model/Seat.js";
+import TimeSlot from "../model/TimeSlot.js";
+import Booking from "../model/Booking.js";
 
 
 export const createLibrary = async (req, res) => {
@@ -457,166 +460,6 @@ export const togglePopularLibrary = async (req, res) => {
 };
 
 
-// GET /api/libraries/search?address=Delhi
-export const getLibrariesByAddress = async (req, res) => {
-  try {
-    const { address } = req.query;
-
-    if (!address) {
-      return res.status(400).json({ message: 'Address query is required' });
-    }
-
-    // Case-insensitive, partial match using regex
-    const libraries = await Library.find({
-      location: { $regex: address, $options: 'i' }
-    }).populate('libraryType').populate('services');
-
-    res.status(200).json(libraries);
-  } catch (error) {
-    console.error('Error fetching libraries by address:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-};
-
-
-export const getNearestLibrariesByPinCode = async (req, res) => {
-  const { pincode } = req.params;
-  const userPinCode = pincode;
-
-  if (!userPinCode) {
-    return res.status(400).json({ message: 'User PIN code is required' });
-  }
-
-  try {
-
-
-    const libraries = await Library.find({ isBlocked: false })
-      .populate('libraryType')
-      .populate('services');
-
-    const enrichedLibraries = [];
-
-    for (const library of libraries) {
-      if (!library.pinCode) continue;
-
-      try {
-      //  console.log(userPinCode,library.pinCode)
-        const distance = await findDistanceBetweenPins(userPinCode,library.pinCode);
-        console.log("dis", distance)
-        enrichedLibraries.push({
-          ...library._doc,
-          distanceInKm: distance,
-        });
-
-      } catch (err) {
-        console.warn(`Skipping library with pin ${library.pinCode}:`, err.message);
-      }
-    }
-
-    enrichedLibraries.sort((a, b) => a.distanceInKm - b.distanceInKm);
-
-    res.status(200).json(enrichedLibraries);
-
-  } catch (error) {
-    console.error('❌ Error in nearest libraries:', error.message);
-    res.status(500).json({ message: 'Server error' });
-  }
-};
-
-export const getNearestLibrariesByLatLon = async (req, res) => {
-  let { userLat, userLon } = req.body;
-
-  // Convert to number (if sent as string)
-  userLat = parseFloat(userLat);
-  userLon = parseFloat(userLon);
-
-  if (!userLat || !userLon) {
-    return res.status(400).json({ message: 'User latitude and longitude are required' });
-  }
-
-  try {
-    const libraries = await Library.find({ isBlocked: false })
-      .populate('libraryType')
-      .populate('services');
-
-    const enrichedLibraries = [];
-
-    for (const library of libraries) {
-      if (!library.location) continue;
-
-      try {
-        const libLocation = await getLatLngFromAddress(library.location);
-        if (!libLocation || !libLocation.lat || !libLocation.lon) {
-          console.warn(`No lat/lon for address: ${library.location}`);
-          continue;
-        }
-
-        const distance = await findDistanceBetweenLatAndLon(userLat, userLon, libLocation.lat, libLocation.lon);
-
-        enrichedLibraries.push({
-          ...library._doc,
-          distanceInKm: Number(distance.toFixed(2)),
-        });
-
-      } catch (err) {
-        console.warn(`Skipping library [${library.libraryName}] due to error:`, err.message);
-      }
-    }
-
-    enrichedLibraries.sort((a, b) => a.distanceInKm - b.distanceInKm);
-
-    res.status(200).json(enrichedLibraries);
-
-  } catch (error) {
-    console.error('❌ Error in nearest libraries:', error.message);
-    res.status(500).json({ message: 'Server error' });
-  }
-};
-
-
-// export const getLibraryQRCode = async (req, res) => {
-//   try {
-//     const id = req.user._id;
-  
-    
-//     const library = await Library.findOne({librarian:id});
-//     if (!library) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Library not found"
-//       });
-//     }
-
-//     // If QR code doesn't exist, generate it
-//     if (!library.qrCode) {
-//       const qrCodeData = JSON.stringify({
-//         libraryId: library._id,
-//         libraryName: library.libraryName,
-//         contactNumber: library.contactNumber,
-//         email: library.email,
-//         location: library.location
-//       });
-
-//       const qrCodePath = await generateQRCode(qrCodeData, library._id);
-//       library.qrCode = qrCodePath;
-//       await library.save();
-//     }
-
-//     // Return the QR code path
-//     res.status(200).json({
-//       success: true,
-//       qrCode: library.qrCode
-//     });
-//   } catch (error) {
-//     console.error("Error getting QR code:", error);
-//     res.status(500).json({
-//       success: false,
-//       message: "Failed to get QR code",
-//       error: error.message
-//     });
-//   }
-// };
-
 export const getLibraryQRCode = async (req, res) => {
   try {
     // Validate user exists and has librarian role
@@ -700,6 +543,280 @@ export const getLibraryQRCode = async (req, res) => {
       success: false,
       message: errorMessage,
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+// Example optimization for getLibrariesByAddress:
+
+export const getLibrariesByAddress = async (req, res) => {
+  try {
+    const { address } = req.query;
+    if (!address) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Address query is required' 
+      });
+    }
+
+    // Get today's date once
+    const today = new Date().toISOString().split('T')[0];
+
+    // First get just library IDs that match the address
+    const matchingLibraries = await Library.find({
+      location: { $regex: address, $options: 'i' },
+      isBlocked: false
+    }).select('_id').lean();
+
+    if (!matchingLibraries.length) {
+      return res.status(200).json({
+        success: true,
+        data: []
+      });
+    }
+
+    const libraryIds = matchingLibraries.map(lib => lib._id);
+
+    // Then get the full data in parallel
+    const [libraries, allSeats] = await Promise.all([
+      Library.find({ _id: { $in: libraryIds } })
+        .populate('libraryType')
+        .populate('services')
+        .lean(),
+      Seat.find({ 
+        library: { $in: libraryIds },
+        isActive: true 
+      }).lean()
+    ]);
+
+    // Get all booked slots for today in one query
+    const bookedSlots = await Booking.find({
+      seat: { $in: allSeats.map(s => s._id) },
+      bookingDate: today,
+      status: { $ne: 'cancelled' }
+    }).select('timeSlot').lean();
+
+    const bookedSlotIds = bookedSlots.map(s => s.timeSlot.toString());
+
+    // Get all available timeslots in one query
+    const availableSlots = await TimeSlot.find({
+      isActive: true,
+      _id: { $nin: bookedSlotIds }
+    }).sort({ startTime: 1 }).lean();
+
+    // Group seats by library
+    const seatsByLibrary = allSeats.reduce((acc, seat) => {
+      if (!acc[seat.library]) acc[seat.library] = [];
+      acc[seat.library].push(seat);
+      return acc;
+    }, {});
+
+    // Build response
+    const response = libraries.map(library => ({
+      ...library,
+      distanceInKm: 0, // You'll need to calculate this if needed
+      seats: (seatsByLibrary[library._id] || []).map(seat => ({
+        ...seat,
+        availableSlots: availableSlots.filter(slot => 
+          // Add any seat-specific slot filtering here
+          true
+        )
+      }))
+    }));
+
+    res.status(200).json({
+      success: true,
+      data: response
+    });
+
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+export const getNearestLibrariesByPinCode = async (req, res) => {
+  const { pincode } = req.params;
+  const userPinCode = pincode;
+
+  if (!userPinCode) {
+    return res.status(400).json({ 
+      success: false,
+      message: 'User PIN code is required' 
+    });
+  }
+
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    
+    const libraries = await Library.find({ isBlocked: false })
+      .populate('libraryType')
+      .populate('services');
+
+    const enrichedLibraries = [];
+
+    for (const library of libraries) {
+      if (!library.pinCode) continue;
+
+      try {
+        const distance = await findDistanceBetweenPins(userPinCode, library.pinCode);
+        
+        // Find all active seats for this library
+        const seats = await Seat.find({ 
+          library: library._id,
+          isActive: true 
+        });
+
+        // For each seat, find available timeslots for today
+        const seatsWithAvailability = await Promise.all(seats.map(async (seat) => {
+          const availableSlots = await TimeSlot.aggregate([
+            {
+              $match: {
+                isActive: true,
+                _id: {
+                  $nin: await Booking.find({
+                    seat: seat._id,
+                    bookingDate: today,
+                    status: { $ne: 'cancelled' }
+                  }).distinct('timeSlot')
+                }
+              }
+            },
+            { $sort: { startTime: 1 } }
+          ]);
+
+          return {
+            ...seat.toObject(),
+            availableSlots
+          };
+        }));
+
+        enrichedLibraries.push({
+          ...library._doc,
+          distanceInKm: distance,
+          seats: seatsWithAvailability
+        });
+
+      } catch (err) {
+        console.warn(`Skipping library with pin ${library.pinCode}:`, err.message);
+      }
+    }
+
+    // Sort by distance
+    enrichedLibraries.sort((a, b) => a.distanceInKm - b.distanceInKm);
+
+    res.status(200).json({
+      success: true,
+      data: enrichedLibraries
+    });
+
+  } catch (error) {
+    console.error('❌ Error in nearest libraries:', error.message);
+    res.status(500).json({ 
+      success: false,
+      message: 'Failed to fetch nearby libraries',
+      error: error.message
+    });
+  }
+};
+
+export const getNearestLibrariesByLatLon = async (req, res) => {
+  let { userLat, userLon } = req.body;
+
+  // Convert to number (if sent as string)
+  userLat = parseFloat(userLat);
+  userLon = parseFloat(userLon);
+
+  if (!userLat || !userLon) {
+    return res.status(400).json({ 
+      success: false,
+      message: 'User latitude and longitude are required' 
+    });
+  }
+
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    
+    const libraries = await Library.find({ isBlocked: false })
+      .populate('libraryType')
+      .populate('services');
+
+    const enrichedLibraries = [];
+
+    for (const library of libraries) {
+      if (!library.location) continue;
+
+      try {
+        const libLocation = await getLatLngFromAddress(library.location);
+        if (!libLocation || !libLocation.lat || !libLocation.lon) {
+          console.warn(`No lat/lon for address: ${library.location}`);
+          continue;
+        }
+
+        const distance = await findDistanceBetweenLatAndLon(
+          userLat, userLon, 
+          libLocation.lat, libLocation.lon
+        );
+
+        // Find all active seats for this library
+        const seats = await Seat.find({ 
+          library: library._id,
+          isActive: true 
+        });
+
+        // For each seat, find available timeslots for today
+        const seatsWithAvailability = await Promise.all(seats.map(async (seat) => {
+          const availableSlots = await TimeSlot.aggregate([
+            {
+              $match: {
+                isActive: true,
+                _id: {
+                  $nin: await Booking.find({
+                    seat: seat._id,
+                    bookingDate: today,
+                    status: { $ne: 'cancelled' }
+                  }).distinct('timeSlot')
+                }
+              }
+            },
+            { $sort: { startTime: 1 } }
+          ]);
+
+          return {
+            ...seat.toObject(),
+            availableSlots
+          };
+        }));
+
+        enrichedLibraries.push({
+          ...library._doc,
+          distanceInKm: Number(distance.toFixed(2)),
+          seats: seatsWithAvailability
+        });
+
+      } catch (err) {
+        console.warn(`Skipping library [${library.libraryName}] due to error:`, err.message);
+      }
+    }
+
+    // Sort by distance
+    enrichedLibraries.sort((a, b) => a.distanceInKm - b.distanceInKm);
+
+    res.status(200).json({
+      success: true,
+      data: enrichedLibraries
+    });
+
+  } catch (error) {
+    console.error('❌ Error in nearest libraries:', error.message);
+    res.status(500).json({ 
+      success: false,
+      message: 'Failed to fetch nearby libraries',
+      error: error.message
     });
   }
 };

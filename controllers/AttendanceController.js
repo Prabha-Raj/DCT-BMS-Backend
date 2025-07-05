@@ -465,7 +465,7 @@ export const getLibraryAttendances = async (req, res) => {
 // Get attendances for a specific student
 export const getMyAttendances = async (req, res) => {
   try {
-    const { studentId } = req.params;
+    const studentId = req.user?._id;
     const { page = 1, limit = 10, startDate, endDate } = req.query;
     
     if (!mongoose.Types.ObjectId.isValid(studentId)) {

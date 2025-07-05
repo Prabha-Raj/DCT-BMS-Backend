@@ -245,7 +245,6 @@ export const getSeatsByLibrary = async (req, res) => {
     }
 
     const seats = await Seat.find(filter)
-      .populate('library')
       .sort({ seatNumber: 1 });
 
     res.status(200).json(seats);

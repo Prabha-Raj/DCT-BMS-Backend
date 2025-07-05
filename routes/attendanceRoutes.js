@@ -5,7 +5,7 @@ import { checkIn, checkOut, getAllAttendances, getLibraryAttendances, getMyAtten
 const router = express.Router();
 
 // Student routes
-router.get("/my-attendances/:studentId", protect, studentOnly, getMyAttendances);
+router.get("/my-attendances/", protect, studentOnly, getMyAttendances);
 router.post("/:libraryId/check-in/:bookingId", protect, studentOnly, checkIn);
 router.post("/:libraryId/check-out/:bookingId", protect, studentOnly, checkOut);
 
