@@ -3,6 +3,9 @@ import dotenv from "dotenv";
 import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
+import http from "http"; // ✅ Add this for socket server
+import { setupSocket } from "./socket/socketConfig.js"; // ✅ Your socket config
+
 import ConnectDB from "./config/Db.js";
 import libraryRoutes from "./routes/libraryRoutes.js";
 import inquiryRoutes from "./routes/inquiryRoutes.js";
@@ -17,12 +20,6 @@ import transactionRoutes from "./routes/transactionRoutes.js";
 import attendanceRoutes from "./routes/attendanceRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 import settingRoutes from "./routes/settingRoutes.js";
-
-
-
-// import { getAddressFromPostalCode, getLatLngFromPostalCode } from "./services/locationService.js";
-// getLatLngFromPostalCode("206001");
-// getAddressFromPostalCode("206001");
 
 const app = express();
 dotenv.config();
@@ -55,16 +52,16 @@ app.use("/api/attendance", attendanceRoutes);
 app.use("/api/stats", dashboardRoutes);
 app.use("/api/setting", settingRoutes);
 
+app.get("/", (req, res) => {
+  res.send("Backend of BookMySpace is running now...");
+});
 
+// ✅ Create HTTP server & attach socket
+const server = http.createServer(app);
+setupSocket(server); // initializes Socket.IO
 
-app.use("/",(req, res)=>{
-  res.send("Backend of bookMySpace is running now...........!|.")
-})
-
-
-
-// Start Server
+// ✅ Start server
 const PORT = process.env.PORT || 4001;
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`Server is live on port: ${PORT}`);
 });

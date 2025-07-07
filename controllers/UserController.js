@@ -58,11 +58,102 @@ export const createUser = async (req, res) => {
   }
 };
 
+// export const loginUser = async (req, res) => {
+//   const { email, password, role } = req.body;
+//   // console.log(email, password, role )
+//   try {
+//     // Validate input
+//     if (!email || !password || !role) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Email, password and role are required",
+//       });
+//     }
+
+//     // Find user by email
+//     const user = await User.findOne({ email });
+
+//     if (!user) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "User not found",
+//       });
+//     }
+
+//     // Check role match
+//     if (user.role !== role) {
+//       return res.status(403).json({
+//         success: false,
+//         message: `Invalid role for this user. Expected ${user.role}`,
+//       });
+//     }
+
+//     // Check if account is blocked
+//     if (user.isBlocked) {
+//       return res.status(403).json({
+//         success: false,
+//         message: "Account is blocked. Please contact administrator.",
+//       });
+//     }
+
+//     // Compare password
+//     const isPasswordValid = await bcrypt.compare(password, user.password);
+//     if (!isPasswordValid) {
+//       return res.status(401).json({
+//         success: false,
+//         message: "Invalid password",
+//       });
+//     }
+
+//     // Generate JWT
+//     const token = jwt.sign(
+//       { id: user._id, role: user.role },
+//       process.env.JWT_SECRET,
+//       { expiresIn: "7d" }
+//     );
+
+//     // Remove password from response
+//     const { password: _, ...userResponse } = user.toObject();
+
+//     let libraryResponse = null;
+    
+//     // If user is librarian, find their library
+//     if (user.role == "librarian") {
+//       const library = await Library.findOne({ librarian: user._id });
+//       if (library) {
+//         libraryResponse = {
+//           _id: library._id,
+//           libraryName: library.libraryName,
+//           // include any other library fields you want to send
+//         };
+//       }
+//     }
+//     res.status(200).json({
+//       success: true,
+//       message: "Login successful",
+//       token,
+//       user: userResponse,
+//       library: libraryResponse // will be null if not librarian or library not found
+//     });
+
+//   } catch (error) {
+//     console.error("Login error:", error);
+//     res.status(500).json({
+//       success: false,
+//       message: "Internal server error",
+//       error: error.message,
+//     });
+//   }
+// };
+// Get all users
+
+// Example: Static OTP
+
+const STATIC_OTP = "123456";
 export const loginUser = async (req, res) => {
   const { email, password, role } = req.body;
-  // console.log(email, password, role )
+
   try {
-    // Validate input
     if (!email || !password || !role) {
       return res.status(400).json({
         success: false,
@@ -70,9 +161,7 @@ export const loginUser = async (req, res) => {
       });
     }
 
-    // Find user by email
     const user = await User.findOne({ email });
-
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -80,7 +169,6 @@ export const loginUser = async (req, res) => {
       });
     }
 
-    // Check role match
     if (user.role !== role) {
       return res.status(403).json({
         success: false,
@@ -88,7 +176,6 @@ export const loginUser = async (req, res) => {
       });
     }
 
-    // Check if account is blocked
     if (user.isBlocked) {
       return res.status(403).json({
         success: false,
@@ -96,7 +183,6 @@ export const loginUser = async (req, res) => {
       });
     }
 
-    // Compare password
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       return res.status(401).json({
@@ -105,35 +191,32 @@ export const loginUser = async (req, res) => {
       });
     }
 
-    // Generate JWT
     const token = jwt.sign(
       { id: user._id, role: user.role },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
 
-    // Remove password from response
     const { password: _, ...userResponse } = user.toObject();
 
     let libraryResponse = null;
-    
-    // If user is librarian, find their library
     if (user.role == "librarian") {
       const library = await Library.findOne({ librarian: user._id });
       if (library) {
         libraryResponse = {
           _id: library._id,
           libraryName: library.libraryName,
-          // include any other library fields you want to send
         };
       }
     }
+
     res.status(200).json({
       success: true,
-      message: "Login successful",
+      message: "Login successful. Please verify OTP to continue.",
       token,
       user: userResponse,
-      library: libraryResponse // will be null if not librarian or library not found
+      library: libraryResponse,
+      otp: STATIC_OTP, // Send the static OTP here
     });
 
   } catch (error) {
@@ -145,7 +228,42 @@ export const loginUser = async (req, res) => {
     });
   }
 };
-// Get all users
+
+
+export const verifyOtp = async (req, res) => {
+  const { otp } = req.body;
+
+  try {
+    if (!otp) {
+      return res.status(400).json({
+        success: false,
+        message: "OTP is required",
+      });
+    }
+
+    if (otp !== "123456") { // Compare with static OTP
+      return res.status(401).json({
+        success: false,
+        message: "Invalid OTP",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "OTP verified successfully",
+    });
+
+  } catch (error) {
+    console.error("OTP verification error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+};
+
+
 export const getAllUsers = async (req, res) => {
   try {
     const { role } = req.query;

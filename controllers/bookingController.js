@@ -6,12 +6,11 @@ import Wallet from "../model/Wallet.js";
 import Transaction from "../model/Transaction.js";
 import Library from "../model/LibraryModel.js";
 import Setting from "../model/Settings.js";
+import User from "../model/User.js";
+import { emitToUser } from "../socket/socketConfig.js";
 
 // Helper function to process payment
-const processPayment = async (userId, amount, description, bookingIds) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
+const processPayment = async (userId, amount, description, bookingIds, session) => {
   try {
     let wallet = await Wallet.findOne({ user: userId }).session(session);
     if (!wallet) {
@@ -35,15 +34,12 @@ const processPayment = async (userId, amount, description, bookingIds) => {
       bookings: bookingIds,
       status: 'completed'
     });
+
     await transaction.save({ session });
 
-    await session.commitTransaction();
     return transaction;
   } catch (error) {
-    await session.abortTransaction();
     throw error;
-  } finally {
-    session.endSession();
   }
 };
 
@@ -93,87 +89,104 @@ const processRefund = async (userId, amount, description, bookingIds, session = 
   }
 };
 
+// Helper function to notify users
+const notifyBookingUpdate = async (booking, eventType) => {
+  try {
+    const library = await Library.findById(booking.library).populate('librarian');
+    if (library?.librarian) {
+      emitToUser(library.librarian._id, 'booking-update', {
+        bookingId: booking._id,
+        eventType,
+        booking: booking.toObject?.() ?? booking
+      });
+    }
+
+    const admins = await User.find({ role: 'admin' });
+    admins.forEach(admin => {
+      emitToUser(admin._id, 'booking-update', {
+        bookingId: booking._id,
+        eventType,
+        booking: booking.toObject?.() ?? booking
+      });
+    });
+
+    emitToUser(booking.user, 'booking-update', {
+      bookingId: booking._id,
+      eventType,
+      booking: booking.toObject?.() ?? booking
+    });
+  } catch (error) {
+    console.error('Notification error:', error);
+  }
+};
 
 // Create a new booking with commission
+
 export const createBooking = async (req, res) => {
   const session = await mongoose.startSession();
-  session.startTransaction();
-
+  
   try {
+    await session.startTransaction();
+
     const { seat, timeSlot, startDate, endDate } = req.body;
     const userId = req.user._id;
 
     if (!seat || !timeSlot || !startDate) {
       await session.abortTransaction();
+      await session.endSession();
       return res.status(400).json({ 
         success: false,
         message: "Seat, time slot, and start date are required" 
       });
     }
 
-    // Fetch required documents in parallel
+    // Fetch documents with session
     const [seatDoc, timeSlotDoc, settings] = await Promise.all([
       Seat.findById(seat).session(session),
       TimeSlot.findById(timeSlot).session(session),
       Setting.findOne().session(session)
     ]);
 
-    // Validate documents
-    if (!seatDoc) {
+    if (!seatDoc || !timeSlotDoc || !settings) {
       await session.abortTransaction();
-      return res.status(404).json({ 
+      await session.endSession();
+      return res.status(!seatDoc ? 404 : !timeSlotDoc ? 404 : 500).json({ 
         success: false,
-        message: "Seat not found" 
-      });
-    }
-
-    if (!timeSlotDoc) {
-      await session.abortTransaction();
-      return res.status(404).json({ 
-        success: false,
-        message: "Time slot not found" 
+        message: !seatDoc ? "Seat not found" : 
+                 !timeSlotDoc ? "Time slot not found" : 
+                 "System settings not configured"
       });
     }
 
     if (!timeSlotDoc.isActive) {
       await session.abortTransaction();
+      await session.endSession();
       return res.status(400).json({ 
         success: false,
         message: "Time slot is not active" 
       });
     }
 
-    if (!settings) {
-      await session.abortTransaction();
-      return res.status(500).json({ 
-        success: false,
-        message: "System settings not configured" 
-      });
-    }
-
-    // Parse dates
+    // Date handling
     const start = new Date(startDate);
     start.setHours(0, 0, 0, 0);
-    
     const end = endDate ? new Date(endDate) : new Date(startDate);
     end.setHours(23, 59, 59, 999);
 
     if (start > end) {
       await session.abortTransaction();
+      await session.endSession();
       return res.status(400).json({ 
         success: false,
         message: "Start date must be before or equal to end date" 
       });
     }
 
-    // Check booking conflicts for each date
+    // Check conflicts
     const conflictingDates = [];
-    const currentDate = new Date(start);
-
-    while (currentDate <= end) {
+    for (let currentDate = new Date(start); currentDate <= end; currentDate.setDate(currentDate.getDate() + 1)) {
       const dateStart = new Date(currentDate);
       dateStart.setHours(0, 0, 0, 0);
-      
       const dateEnd = new Date(currentDate);
       dateEnd.setHours(23, 59, 59, 999);
 
@@ -181,36 +194,32 @@ export const createBooking = async (req, res) => {
         seat,
         timeSlot,
         library: seatDoc.library,
-        bookingDate: {
-          $gte: dateStart,
-          $lte: dateEnd
-        },
+        bookingDate: { $gte: dateStart, $lte: dateEnd },
         status: { $in: ["pending", "confirmed"] }
       }).session(session);
 
       if (conflict) {
-        conflictingDates.push(new Date(currentDate).toISOString().split('T')[0]);
+        conflictingDates.push(currentDate.toISOString().split('T')[0]);
       }
-
-      currentDate.setDate(currentDate.getDate() + 1);
     }
 
     if (conflictingDates.length > 0) {
       await session.abortTransaction();
+      await session.endSession();
       return res.status(400).json({
         success: false,
-        message: "This time slot is not available for the selected date(s).",
+        message: "Time slot not available for selected dates",
         conflicts: conflictingDates
       });
     }
 
-    // Calculate booking details
+    // Calculate amounts - THIS IS WHERE WE DEFINE totalAmount
     const days = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
     const slotPrice = timeSlotDoc.price * days;
-    const commission = settings.bookingCommission * days; // Commission per day
-    const totalAmount = slotPrice + commission;
+    const commission = settings.bookingCommission * days;
+    const totalAmount = slotPrice + commission; // Now properly defined
 
-    // Check wallet balance
+    // Wallet handling
     let wallet = await Wallet.findOne({ user: userId }).session(session);
     if (!wallet) {
       wallet = new Wallet({ user: userId, balance: 0 });
@@ -219,6 +228,7 @@ export const createBooking = async (req, res) => {
 
     if (wallet.balance < totalAmount) {
       await session.abortTransaction();
+      await session.endSession();
       return res.status(400).json({ 
         success: false,
         message: "Insufficient balance",
@@ -227,36 +237,26 @@ export const createBooking = async (req, res) => {
       });
     }
 
-    // Deduct amount from wallet
+    // Rest of your code remains the same...
     wallet.balance -= totalAmount;
     await wallet.save({ session });
 
-    // Create transaction for the payment
-    const transaction = new Transaction({
-      wallet: wallet._id,
-      user: userId,
-      type: "debit",
-      amount: totalAmount,
-      description: `Booking for ${days} day(s) at ${seatDoc.library}`,
-      status: "pending",
-      metadata: {
-        slotPrice,
-        commission,
-        days
-      }
-    });
-    await transaction.save({ session });
+    // Create transaction
+    const transaction = await processPayment(
+      userId,
+      totalAmount,
+      `Booking for ${days} day(s) at ${seatDoc.library}`,
+      [],
+      session
+    );
 
-    // Create bookings for each date
+    // Create bookings
     const bookings = [];
-    const dateLoop = new Date(start);
-    
-    while (dateLoop <= end) {
-      const bookingDate = new Date(Date.UTC(
-        dateLoop.getFullYear(),
-        dateLoop.getMonth(),
-        dateLoop.getDate()
-      ));
+    for (let date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
+      const bookingDate = new Date(date);
+      bookingDate.setHours(0, 0, 0, 0);
+
+      const fullAmount = timeSlotDoc.price + settings.bookingCommission;
 
       const booking = new Booking({
         user: userId,
@@ -267,92 +267,107 @@ export const createBooking = async (req, res) => {
         status: "confirmed",
         paymentStatus: "paid",
         amount: timeSlotDoc.price,
-        commission: settings.bookingCommission, // Store commission per booking
-        totalAmount: timeSlotDoc.price + settings.bookingCommission, // Store total charged
+        commission: settings.bookingCommission,
+        totalAmount: fullAmount,
         paymentId: transaction._id
       });
 
       await booking.save({ session });
       bookings.push(booking);
-      dateLoop.setDate(dateLoop.getDate() + 1);
     }
 
-    // Update transaction with booking references
+    // Update transaction with booking IDs
     transaction.bookings = bookings.map(b => b._id);
-    transaction.status = "completed";
     await transaction.save({ session });
 
     await session.commitTransaction();
 
-    // Return populated bookings
+    // Get populated bookings
     const populatedBookings = await Booking.find({
       _id: { $in: bookings.map(b => b._id) }
     })
       .populate("user", "-password")
       .populate("seat")
       .populate("timeSlot")
-      .populate("library")
-      .sort({ bookingDate: 1 });
+      .populate("library");
+
+    // Send notifications
+    for (const booking of populatedBookings) {
+      await notifyBookingUpdate(booking, 'booking-created');
+    }
 
     res.status(201).json({
       success: true,
-      message: `Successfully created ${populatedBookings.length} bookings`,
+      message: `Created ${populatedBookings.length} bookings`,
       bookings: populatedBookings,
       transaction,
-      summary: {
-        totalDays: days,
-        slotPrice,
-        commission,
-        totalAmount
-      }
+      summary: { totalDays: days, slotPrice, commission, totalAmount }
     });
 
   } catch (error) {
-    await session.abortTransaction();
-    console.error("Booking creation error:", error);
+    if (session.inTransaction()) {
+      await session.abortTransaction();
+    }
+    console.error("Booking error:", error);
     res.status(500).json({ 
       success: false,
       message: error.message,
       error: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   } finally {
-    session.endSession();
+    await session.endSession();
   }
 };
-
 
 // Get bookings for a user
 export const getUserBookings = async (req, res) => {
   try {
     const userId = req.user._id;
-    const { status } = req.query;
+    const { status, page = 1, limit = 10 } = req.query;
 
     const filter = { user: userId };
     if (status) filter.status = status;
+
+    const total = await Booking.countDocuments(filter);
 
     const bookings = await Booking.find(filter)
       .populate('seat')
       .populate('timeSlot')
       .populate('library')
       .populate('paymentId')
-      .sort({ bookingDate: -1 });
+      .sort({ bookingDate: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit);
 
-    res.status(200).json(bookings);
+    res.status(200).json({
+      success: true,
+      count: bookings.length,
+      total,
+      page: parseInt(page),
+      pages: Math.ceil(total / limit),
+      data: bookings
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ 
+      success: false,
+      message: error.message 
+    });
   }
 };
 
 // Get bookings for a library (admin/librarian access)
 export const getLibraryBookings = async (req, res) => {
   try {
-    const { date, status } = req.query;
+    const { date, status, page = 1, limit = 10 } = req.query;
 
     // Get the library assigned to the logged-in user
     const myLibrary = await Library.findOne({ librarian: req.user?._id }).select("_id");
 
     if (!myLibrary) {
-      return res.status(404).json({ message: "Library not found for this user" });
+      return res.status(404).json({ 
+        success: false,
+        message: "Library not found for this user" 
+      });
     }
 
     const libraryId = myLibrary._id;
@@ -369,24 +384,38 @@ export const getLibraryBookings = async (req, res) => {
       filter.bookingDate = { $gte: startDate, $lte: endDate };
     }
 
+    const total = await Booking.countDocuments(filter);
+
     const bookings = await Booking.find(filter)
       .populate('user', '-password')
       .populate('seat')
       .populate('timeSlot')
       .populate('paymentId')
-      .sort({ bookingDate: 1 });
+      .sort({ bookingDate: 1 })
+      .skip((page - 1) * limit)
+      .limit(limit);
 
-    res.status(200).json(bookings);
+    res.status(200).json({
+      success: true,
+      count: bookings.length,
+      total,
+      page: parseInt(page),
+      pages: Math.ceil(total / limit),
+      data: bookings
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ 
+      success: false,
+      message: error.message 
+    });
   }
 };
 
-// Get bookings for a library (admin/librarian access)
+// Get bookings for a library by ID
 export const getBookingsByLibraryId = async (req, res) => {
   try {
-    const { date, status } = req.query;
-    const {libraryId} = req.params;
+    const { date, status, page = 1, limit = 10 } = req.query;
+    const { libraryId } = req.params;
     const filter = { library: libraryId };
 
     if (status) filter.status = status;
@@ -399,34 +428,50 @@ export const getBookingsByLibraryId = async (req, res) => {
       filter.bookingDate = { $gte: startDate, $lte: endDate };
     }
 
+    const total = await Booking.countDocuments(filter);
+
     const bookings = await Booking.find(filter)
       .populate('user', '-password')
       .populate('seat')
       .populate('timeSlot')
       .populate('paymentId')
-      .sort({ bookingDate: 1 });
+      .sort({ bookingDate: 1 })
+      .skip((page - 1) * limit)
+      .limit(limit);
 
-    res.status(200).json(bookings);
+    res.status(200).json({
+      success: true,
+      count: bookings.length,
+      total,
+      page: parseInt(page),
+      pages: Math.ceil(total / limit),
+      data: bookings
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ 
+      success: false,
+      message: error.message 
+    });
   }
 };
 
-
-// Update booking status (for librarian/admin to reject)
+// Update booking status
 export const updateBookingStatus = async (req, res) => {
   const session = await mongoose.startSession();
-  session.startTransaction();
-
+  
   try {
+    await session.startTransaction();
+
     const { id } = req.params;
     const { status } = req.body;
     const userId = req.user._id;
 
-
     if (!mongoose.Types.ObjectId.isValid(id)) {
       await session.abortTransaction();
-      return res.status(400).json({ message: "Invalid booking ID" });
+      return res.status(400).json({ 
+        success: false,
+        message: "Invalid booking ID" 
+      });
     }
 
     // Find the booking first to check current status
@@ -439,20 +484,26 @@ export const updateBookingStatus = async (req, res) => {
 
     if (!booking) {
       await session.abortTransaction();
-      return res.status(404).json({ message: "Booking not found" });
+      return res.status(404).json({ 
+        success: false,
+        message: "Booking not found" 
+      });
     }
 
     // Only allow certain status transitions
     if (status === 'rejected' && booking.status !== 'pending' && booking.status !== 'confirmed') {
       await session.abortTransaction();
-      return res.status(400).json({ message: "Cannot reject a booking that's not pending or confirmed" });
+      return res.status(400).json({ 
+        success: false,
+        message: "Cannot reject a booking that's not pending or confirmed" 
+      });
     }
 
     // Process refund if rejecting a pending or confirmed booking
     if (status === 'rejected' && booking.paymentStatus === 'paid') {
       await processRefund(
         booking.user._id,
-        booking.amount,
+        booking.totalAmount,
         `Refund for rejected booking on ${booking.bookingDate.toDateString()}`,
         [booking._id],
         session
@@ -480,53 +531,83 @@ export const updateBookingStatus = async (req, res) => {
 
     await session.commitTransaction();
 
-    res.status(200).json(updatedBooking);
+    // Notify about status change
+    await notifyBookingUpdate(updatedBooking, 'booking-status-updated');
+
+    res.status(200).json({
+      success: true,
+      data: updatedBooking
+    });
   } catch (error) {
     await session.abortTransaction();
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ 
+      success: false,
+      message: error.message 
+    });
   } finally {
     session.endSession();
   }
 };
 
-
-// Cancel a booking (for user)
+// Cancel a booking
 export const cancelBooking = async (req, res) => {
+  const session = await mongoose.startSession();
+  
   try {
+    await session.startTransaction();
+
     const { id } = req.params;
     const userId = req.user._id;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ message: "Invalid booking ID" });
+      await session.abortTransaction();
+      return res.status(400).json({ 
+        success: false,
+        message: "Invalid booking ID" 
+      });
     }
 
     // Find the booking first to check current status
     const booking = await Booking.findOne({ _id: id, user: userId })
       .populate('seat')
       .populate('timeSlot')
-      .populate('library');
+      .populate('library')
+      .session(session);
 
     if (!booking) {
-      return res.status(404).json({ message: "Booking not found or not authorized" });
+      await session.abortTransaction();
+      return res.status(404).json({ 
+        success: false,
+        message: "Booking not found or not authorized" 
+      });
     }
 
     // Check if booking can be cancelled
     if (booking.status !== 'confirmed' && booking.status !== 'pending') {
-      return res.status(400).json({ message: "Only pending or confirmed bookings can be cancelled" });
+      await session.abortTransaction();
+      return res.status(400).json({ 
+        success: false,
+        message: "Only pending or confirmed bookings can be cancelled" 
+      });
     }
 
     // Check cancellation window using the virtual property
     if (!booking.canCancel && booking.status === 'confirmed') {
-      return res.status(400).json({ message: "Cancellation window has passed (must cancel at least 1 hour before booking time)" });
+      await session.abortTransaction();
+      return res.status(400).json({ 
+        success: false,
+        message: "Cancellation window has passed (must cancel at least 1 hour before booking time)" 
+      });
     }
 
     // Process refund if paid
     if (booking.paymentStatus === 'paid') {
       await processRefund(
         userId,
-        booking.amount,
+        booking.totalAmount,
         `Refund for cancelled booking on ${booking.bookingDate}`,
-        [booking._id]
+        [booking._id],
+        session
       );
     }
 
@@ -538,21 +619,36 @@ export const cancelBooking = async (req, res) => {
         paymentStatus: booking.paymentStatus === 'paid' ? 'refunded' : 'failed',
         cancelledAt: new Date()
       },
-      { new: true }
+      { new: true, session }
     )
       .populate('seat')
       .populate('timeSlot')
       .populate('library')
       .populate('paymentId');
 
-    res.status(200).json(updatedBooking);
+    await session.commitTransaction();
+
+    // Notify about cancellation
+    await notifyBookingUpdate(updatedBooking, 'booking-cancelled');
+
+    res.status(200).json({
+      success: true,
+      data: updatedBooking
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    await session.abortTransaction();
+    res.status(500).json({ 
+      success: false,
+      message: error.message 
+    });
+  } finally {
+    session.endSession();
   }
 };
 
 
 
+// Get all bookings with pagination
 export const getAllBookings = async (req, res) => {
   try {
     const { page = 1, limit = 20 } = req.query;
@@ -612,8 +708,7 @@ export const getAllBookings = async (req, res) => {
   }
 };
 
-
-// Get all bookings filtered by library and user for current date only
+// Get bookings by library and user for current date
 export const getBookingsByLibraryAndUser = async (req, res) => {
   try {
     const { libraryId } = req.params;
@@ -641,7 +736,7 @@ export const getBookingsByLibraryAndUser = async (req, res) => {
       });
     }
 
-    // Get current date range (start of day to end of day)
+    // Get current date range
     const now = new Date();
     const startOfDay = new Date(now);
     startOfDay.setHours(0, 0, 0, 0);
@@ -703,7 +798,7 @@ export const getBookingsByLibraryAndUser = async (req, res) => {
       total,
       page: parseInt(page),
       pages: Math.ceil(total / limit),
-      currentDate: now.toISOString().split('T')[0], // Add current date in response
+      currentDate: now.toISOString().split('T')[0],
       data: bookings
     });
 
