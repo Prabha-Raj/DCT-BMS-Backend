@@ -152,7 +152,7 @@ export const createUser = async (req, res) => {
 const STATIC_OTP = "123456";
 export const loginUser = async (req, res) => {
   const { email, password, role } = req.body;
-
+  console.log(email)
   try {
     if (!email || !password || !role) {
       return res.status(400).json({
@@ -165,7 +165,7 @@ export const loginUser = async (req, res) => {
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: "User not found",
+        message: "User not found !",
       });
     }
 
