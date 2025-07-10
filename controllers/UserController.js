@@ -1,8 +1,8 @@
 import Library from "../model/LibraryModel.js";
-import User from "../model/User.js"; // Adjust path as needed
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import Wallet from "../model/Wallet.js";
+import User from "../model/User.js";
 
 export const createUser = async (req, res) => {
   try {
@@ -70,12 +70,12 @@ export const loginUser = async (req, res) => {
       });
     }
 
-    const user = await User.findOne({ email:email });
+    const user = await User.findOne({email});
     console.log(user)
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: "User not found !",
+        message: "user na hai",
       });
     }
 
