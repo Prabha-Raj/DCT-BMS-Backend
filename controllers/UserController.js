@@ -61,7 +61,7 @@ export const createUser = async (req, res) => {
 const STATIC_OTP = "123456";
 export const loginUser = async (req, res) => {
   const { email, password, role } = req.body;
-  console.log(email, password, role)
+  // console.log(email, password, role)
   try {
     if (!email || !password || !role) {
       return res.status(400).json({
@@ -71,7 +71,7 @@ export const loginUser = async (req, res) => {
     }
 
     const user = await User.findOne({email});
-    console.log(user)
+    // console.log(user)
     if (!user) {
       return res.status(404).json({
         success: false,
