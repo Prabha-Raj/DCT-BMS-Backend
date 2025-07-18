@@ -5,6 +5,11 @@ const inquirySchema = new mongoose.Schema(
     name: { type: String, required: true },
     email: { type: String, required: true },
     query: { type: String, required: true },
+    status: {
+      type:String,
+      enum: ["pending", "accepted", "rejected", "resolved"],
+      default: "pending"
+    }
   },
   { timestamps: true }
 );

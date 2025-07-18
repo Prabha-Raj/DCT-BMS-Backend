@@ -10,7 +10,7 @@ import {
 const router = express.Router();
 
 router.post("/", createInquiry);
-router.get("/", getAllInquiries);
+router.get("/",  getAllInquiries);
 router.get("/:id", getInquiryById);
 router.put("/:id", updateInquiry);
 router.delete("/:id", deleteInquiry);

@@ -36,11 +36,26 @@ export const getInquiryById = async (req, res) => {
 // UPDATE
 export const updateInquiry = async (req, res) => {
   try {
-    const updated = await Inquiry.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    if (!updated) return res.status(404).json({ message: "Inquiry not found",success:false });
-    res.status(200).json({ message: "Inquiry updated", data: updated ,success:true});
+    const { status } = req.body;
+    
+    // Validate status if it's being updated
+    if (status && !["pending", "accepted", "rejected", "resolved"].includes(status)) {
+      return res.status(400).json({ 
+        message: "Invalid status value", 
+        success: false 
+      });
+    }
+
+    const updated = await Inquiry.findByIdAndUpdate(
+      req.params.id, 
+      req.body, 
+      { new: true }
+    );
+    
+    if (!updated) return res.status(404).json({ message: "Inquiry not found", success: false });
+    res.status(200).json({ message: "Inquiry updated", data: updated, success: true });
   } catch (error) {
-    res.status(500).json({ message: "Failed to update inquiry", error: error.message ,success:false});
+    res.status(500).json({ message: "Failed to update inquiry", error: error.message, success: false });
   }
 };
 
