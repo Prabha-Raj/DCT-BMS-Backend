@@ -128,6 +128,109 @@ export const getSeatById = async (req, res) => {
   }
 };
 
+export const getSeatDetails = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { date } = req.query; // Optional date filter
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid seat ID" });
+    }
+
+    // Find the seat with basic details
+    const seat = await Seat.findById(id).lean();
+    if (!seat) {
+      return res.status(404).json({ message: "Seat not found" });
+    }
+
+    // Find all time slots associated with this seat (include seats array)
+    const timeSlots = await TimeSlot.find({ seats: id })
+      .select('startTime endTime price isActive seats')
+      .sort({ startTime: 1 })
+      .lean();
+
+    // Prepare the query for bookings
+    const bookingQuery = { 
+      seat: id,
+      status: { $nin: ['cancelled', 'rejected'] } // Exclude cancelled/rejected bookings
+    };
+
+    // Add date filter if provided
+    if (date) {
+      const startDate = new Date(date);
+      startDate.setUTCHours(0, 0, 0, 0);
+      
+      const endDate = new Date(date);
+      endDate.setUTCHours(23, 59, 59, 999);
+      
+      bookingQuery.bookingDate = { $gte: startDate, $lte: endDate };
+    }
+
+    // Get all bookings for this seat in one query
+    const allBookings = await Booking.find(bookingQuery)
+      .populate('user', 'name email')
+      .populate('timeSlot', 'startTime endTime price')
+      .sort({ bookingDate: 1, 'timeSlot.startTime': 1 })
+      .lean();
+
+    // Group bookings by time slot
+    const timeSlotsWithBookings = timeSlots.map(timeSlot => {
+      const bookings = allBookings.filter(
+        booking => booking.timeSlot._id.toString() === timeSlot._id.toString()
+      );
+
+      return {
+        timeSlot: {
+          _id: timeSlot._id,
+          startTime: timeSlot.startTime,
+          endTime: timeSlot.endTime,
+          price: timeSlot.price,
+          isActive: timeSlot.isActive,
+          available: !bookings.some(b => b.status === 'confirmed') // Check if slot is available
+        },
+        bookings: bookings.map(booking => ({
+          _id: booking._id,
+          bookingDate: booking.bookingDate,
+          status: booking.status,
+          paymentStatus: booking.paymentStatus,
+          user: booking.user,
+          createdAt: booking.createdAt
+        })),
+        totalBookings: bookings.length,
+        // Calculate available seats by checking how many seats are in this time slot
+        // minus the number of confirmed bookings
+        availableSeats: timeSlot.seats ? 
+          timeSlot.seats.length - bookings.filter(b => b.status === 'confirmed').length :
+          0
+      };
+    });
+
+    // Prepare the response
+    const seatDetails = {
+      seat: {
+        _id: seat._id,
+        seatNumber: seat.seatNumber,
+        seatName: seat.seatName,
+        isActive: seat.isActive,
+        library: seat.library
+      },
+      timeSlots: timeSlotsWithBookings,
+      meta: {
+        totalTimeSlots: timeSlotsWithBookings.length,
+        totalBookings: allBookings.length,
+        dateFilter: date || 'all dates'
+      }
+    };
+
+    res.status(200).json(seatDetails);
+  } catch (error) {
+    console.error('Error in getSeatDetails:', error);
+    res.status(500).json({ 
+      message: "Failed to fetch seat details",
+      error: error.message 
+    });
+  }
+};
 // Update seat
 export const updateSeat = async (req, res) => {
   try {
@@ -250,5 +353,94 @@ export const getSeatsByLibrary = async (req, res) => {
     res.status(200).json(seats);
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+};
+
+export const addTimeSlotsForASeat = async (req, res) => {
+  try {
+    const { id: seatId } = req.params;
+    const { libraryId, timeSlots } = req.body;
+
+    // Validate inputs
+    if (!mongoose.Types.ObjectId.isValid(seatId) || !mongoose.Types.ObjectId.isValid(libraryId)) {
+      return res.status(400).json({ message: "Invalid seat or library ID" });
+    }
+
+    if (!Array.isArray(timeSlots) || timeSlots.length === 0) {
+      return res.status(400).json({ message: "Time slots array is required" });
+    }
+
+    // Check if seat exists and belongs to the library
+    const seat = await Seat.findOne({ _id: seatId, library: libraryId });
+    if (!seat) {
+      return res.status(404).json({ message: "Seat not found in the specified library" });
+    }
+
+    // Process each time slot
+    const createdTimeSlots = [];
+    const errors = [];
+
+    for (const slot of timeSlots) {
+      try {
+        // Check for existing time slot with same details
+        const existingSlot = await TimeSlot.findOne({
+          library: libraryId,
+          startTime: slot.startTime,
+          endTime: slot.endTime,
+          price: slot.price
+        });
+
+        if (existingSlot) {
+          // If time slot exists, check if seat is already assigned
+          if (existingSlot.seats.includes(seatId)) {
+            errors.push({
+              timeSlot: slot,
+              error: "Seat already assigned to this time slot"
+            });
+            continue;
+          }
+
+          // Add seat to existing time slot
+          existingSlot.seats.push(seatId);
+          await existingSlot.save();
+          createdTimeSlots.push(existingSlot);
+        } else {
+          // Create new time slot
+          const newTimeSlot = new TimeSlot({
+            library: libraryId,
+            seats: [seatId],
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+            price: slot.price,
+            isActive: true
+          });
+
+          await newTimeSlot.save();
+          createdTimeSlots.push(newTimeSlot);
+        }
+      } catch (error) {
+        errors.push({
+          timeSlot: slot,
+          error: error.message
+        });
+      }
+    }
+
+    if (createdTimeSlots.length === 0 && errors.length > 0) {
+      return res.status(400).json({
+        message: "Failed to create any time slots",
+        errors: errors
+      });
+    }
+
+    res.status(201).json({
+      message: "Time slots processed successfully",
+      createdTimeSlots: createdTimeSlots,
+      errors: errors.length > 0 ? errors : undefined
+    });
+
+  } catch (error) {
+    console.error("Error in addTimeSlotsForASeat:", error);
+    res.status(500).json({ message: "Internal server error", error: error.message });
   }
 };

@@ -2,6 +2,18 @@ import mongoose from "mongoose";
 
 const TimeSlotSchema = new mongoose.Schema(
   {
+    library:{
+      type: mongoose.Schema.Types.ObjectId,
+      ref:"Library",
+      required:true
+    },
+    
+    seats:[{
+      type: mongoose.Schema.Types.ObjectId,
+      ref:"Seat",
+      default:null
+    }],
+
     startTime: {
       type: String,
       required: true,
