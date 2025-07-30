@@ -173,6 +173,56 @@ export const verifyOtp = async (req, res) => {
   }
 };
 
+// google login
+export const googleLogin = async (req, res) => {
+  const { firebaseToken } = req.body;
+
+  try {
+    // 🔍 Verify token from Firebase
+    const decodedToken = await admin.auth().verifyIdToken(firebaseToken);
+    const { email, name, uid } = decodedToken;
+
+    if (!email) {
+      return res.status(400).json({ success: false, message: "Invalid Google user" });
+    }
+
+    let user = await User.findOne({ email });
+
+    if (!user) {
+      // 🆕 Auto-register Google users (optional or you can reject unknowns)
+      user = await User.create({
+        name,
+        email,
+        role: "student", // Or use custom logic
+        authProvider: "google",
+        password: "firebase", // dummy value
+      });
+    }
+
+    if (user.isBlocked) {
+      return res.status(403).json({ success: false, message: "Account is blocked" });
+    }
+
+    // 🛡️ Issue JWT (same as email login)
+    const token = jwt.sign(
+      { id: user._id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    const { password: _, ...userData } = user.toObject();
+
+    res.status(200).json({
+      success: true,
+      message: "Google login successful",
+      token,
+      user: userData,
+    });
+  } catch (error) {
+    console.error("Google Login Error:", error.message);
+    res.status(401).json({ success: false, message: "Firebase token invalid" });
+  }
+};
 
 export const getAllUsers = async (req, res) => {
   try {

@@ -122,9 +122,206 @@ const notifyBookingUpdate = async (booking, eventType) => {
 
 // Create a new booking with commission
 
+// export const createBooking = async (req, res) => {
+//   const session = await mongoose.startSession();
+  
+//   try {
+//     await session.startTransaction();
+
+//     const { seat, timeSlot, startDate, endDate } = req.body;
+//     const userId = req.user._id;
+
+//     if (!seat || !timeSlot || !startDate) {
+//       await session.abortTransaction();
+//       await session.endSession();
+//       return res.status(400).json({ 
+//         success: false,
+//         message: "Seat, time slot, and start date are required" 
+//       });
+//     }
+
+//     // Fetch documents with session
+//     const [seatDoc, timeSlotDoc, settings] = await Promise.all([
+//       Seat.findById(seat).session(session),
+//       TimeSlot.findById(timeSlot).session(session),
+//       Setting.findOne().session(session)
+//     ]);
+
+//     if (!seatDoc || !timeSlotDoc || !settings) {
+//       await session.abortTransaction();
+//       await session.endSession();
+//       return res.status(!seatDoc ? 404 : !timeSlotDoc ? 404 : 500).json({ 
+//         success: false,
+//         message: !seatDoc ? "Seat not found" : 
+//                  !timeSlotDoc ? "Time slot not found" : 
+//                  "System settings not configured"
+//       });
+//     }
+
+//     if (!timeSlotDoc.isActive) {
+//       await session.abortTransaction();
+//       await session.endSession();
+//       return res.status(400).json({ 
+//         success: false,
+//         message: "Time slot is not active" 
+//       });
+//     }
+
+//     // Date handling
+//     const start = new Date(startDate);
+//     start.setHours(0, 0, 0, 0);
+//     const end = endDate ? new Date(endDate) : new Date(startDate);
+//     end.setHours(23, 59, 59, 999);
+
+//     if (start > end) {
+//       await session.abortTransaction();
+//       await session.endSession();
+//       return res.status(400).json({ 
+//         success: false,
+//         message: "Start date must be before or equal to end date" 
+//       });
+//     }
+
+//     // Check conflicts
+//     const conflictingDates = [];
+//     for (let currentDate = new Date(start); currentDate <= end; currentDate.setDate(currentDate.getDate() + 1)) {
+//       const dateStart = new Date(currentDate);
+//       dateStart.setHours(0, 0, 0, 0);
+//       const dateEnd = new Date(currentDate);
+//       dateEnd.setHours(23, 59, 59, 999);
+
+//       const conflict = await Booking.findOne({
+//         seat,
+//         timeSlot,
+//         library: seatDoc.library,
+//         bookingDate: { $gte: dateStart, $lte: dateEnd },
+//         status: { $in: ["pending", "confirmed"] }
+//       }).session(session);
+
+//       if (conflict) {
+//         conflictingDates.push(currentDate.toISOString().split('T')[0]);
+//       }
+//     }
+
+//     if (conflictingDates.length > 0) {
+//       await session.abortTransaction();
+//       await session.endSession();
+//       return res.status(400).json({
+//         success: false,
+//         message: "Time slot not available for selected dates",
+//         conflicts: conflictingDates
+//       });
+//     }
+
+//     // Calculate amounts - THIS IS WHERE WE DEFINE totalAmount
+//     const days = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
+//     const slotPrice = timeSlotDoc.price * days;
+//     const commission = settings.bookingCommission * days;
+//     const totalAmount = slotPrice + commission; // Now properly defined
+
+//     // Wallet handling
+//     let wallet = await Wallet.findOne({ user: userId }).session(session);
+//     if (!wallet) {
+//       wallet = new Wallet({ user: userId, balance: 0 });
+//       await wallet.save({ session });
+//     }
+
+//     if (wallet.balance < totalAmount) {
+//       await session.abortTransaction();
+//       await session.endSession();
+//       return res.status(400).json({ 
+//         success: false,
+//         message: "Insufficient balance",
+//         required: totalAmount,
+//         available: wallet.balance
+//       });
+//     }
+
+//     // Rest of your code remains the same...
+//     wallet.balance -= totalAmount;
+//     await wallet.save({ session });
+
+//     // Create transaction
+//     const transaction = await processPayment(
+//       userId,
+//       totalAmount,
+//       `Booking for ${days} day(s) at ${seatDoc.library}`,
+//       [],
+//       session
+//     );
+
+//     // Create bookings
+//     const bookings = [];
+//     for (let date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
+//       const bookingDate = new Date(date);
+//       bookingDate.setHours(0, 0, 0, 0);
+
+//       const fullAmount = timeSlotDoc.price + settings.bookingCommission;
+
+//       const booking = new Booking({
+//         user: userId,
+//         seat,
+//         timeSlot,
+//         library: seatDoc.library,
+//         bookingDate,
+//         status: "confirmed",
+//         paymentStatus: "paid",
+//         amount: timeSlotDoc.price,
+//         commission: settings.bookingCommission,
+//         totalAmount: fullAmount,
+//         paymentId: transaction._id
+//       });
+
+//       await booking.save({ session });
+//       bookings.push(booking);
+//     }
+
+//     // Update transaction with booking IDs
+//     transaction.bookings = bookings.map(b => b._id);
+//     await transaction.save({ session });
+
+//     await session.commitTransaction();
+
+//     // Get populated bookings
+//     const populatedBookings = await Booking.find({
+//       _id: { $in: bookings.map(b => b._id) }
+//     })
+//       .populate("user", "-password")
+//       .populate("seat")
+//       .populate("timeSlot")
+//       .populate("library");
+
+//     // Send notifications
+//     for (const booking of populatedBookings) {
+//       await notifyBookingUpdate(booking, 'booking-created');
+//     }
+
+//     res.status(201).json({
+//       success: true,
+//       message: `Created ${populatedBookings.length} bookings`,
+//       bookings: populatedBookings,
+//       transaction,
+//       summary: { totalDays: days, slotPrice, commission, totalAmount }
+//     });
+
+//   } catch (error) {
+//     if (session.inTransaction()) {
+//       await session.abortTransaction();
+//     }
+//     console.error("Booking error:", error);
+//     res.status(500).json({ 
+//       success: false,
+//       message: `Booking error: ${error.message}`,
+//       error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+//     });
+//   } finally {
+//     await session.endSession();
+//   }
+// };
+
 export const createBooking = async (req, res) => {
   const session = await mongoose.startSession();
-  
+
   try {
     await session.startTransaction();
 
@@ -132,59 +329,38 @@ export const createBooking = async (req, res) => {
     const userId = req.user._id;
 
     if (!seat || !timeSlot || !startDate) {
-      await session.abortTransaction();
-      await session.endSession();
-      return res.status(400).json({ 
-        success: false,
-        message: "Seat, time slot, and start date are required" 
-      });
+      throw new Error("Seat, time slot, and start date are required");
     }
 
-    // Fetch documents with session
     const [seatDoc, timeSlotDoc, settings] = await Promise.all([
       Seat.findById(seat).session(session),
       TimeSlot.findById(timeSlot).session(session),
       Setting.findOne().session(session)
     ]);
 
-    if (!seatDoc || !timeSlotDoc || !settings) {
-      await session.abortTransaction();
-      await session.endSession();
-      return res.status(!seatDoc ? 404 : !timeSlotDoc ? 404 : 500).json({ 
-        success: false,
-        message: !seatDoc ? "Seat not found" : 
-                 !timeSlotDoc ? "Time slot not found" : 
-                 "System settings not configured"
-      });
-    }
+    if (!seatDoc) throw new Error("Seat not found");
+    if (!timeSlotDoc) throw new Error("Time slot not found");
+    if (!settings) throw new Error("System settings not configured");
 
     if (!timeSlotDoc.isActive) {
-      await session.abortTransaction();
-      await session.endSession();
-      return res.status(400).json({ 
-        success: false,
-        message: "Time slot is not active" 
-      });
+      throw new Error("Time slot is not active");
     }
 
     // Date handling
     const start = new Date(startDate);
     start.setHours(0, 0, 0, 0);
+
     const end = endDate ? new Date(endDate) : new Date(startDate);
     end.setHours(23, 59, 59, 999);
 
     if (start > end) {
-      await session.abortTransaction();
-      await session.endSession();
-      return res.status(400).json({ 
-        success: false,
-        message: "Start date must be before or equal to end date" 
-      });
+      throw new Error("Start date must be before or equal to end date");
     }
 
-    // Check conflicts
+    // Conflict check (no mutation of start/end)
     const conflictingDates = [];
-    for (let currentDate = new Date(start); currentDate <= end; currentDate.setDate(currentDate.getDate() + 1)) {
+    let currentDate = new Date(start);
+    while (currentDate <= end) {
       const dateStart = new Date(currentDate);
       dateStart.setHours(0, 0, 0, 0);
       const dateEnd = new Date(currentDate);
@@ -201,11 +377,13 @@ export const createBooking = async (req, res) => {
       if (conflict) {
         conflictingDates.push(currentDate.toISOString().split('T')[0]);
       }
+
+      // Increment safely
+      currentDate = new Date(currentDate.getTime() + 24 * 60 * 60 * 1000);
     }
 
     if (conflictingDates.length > 0) {
       await session.abortTransaction();
-      await session.endSession();
       return res.status(400).json({
         success: false,
         message: "Time slot not available for selected dates",
@@ -213,13 +391,12 @@ export const createBooking = async (req, res) => {
       });
     }
 
-    // Calculate amounts - THIS IS WHERE WE DEFINE totalAmount
+    // Calculate amount
     const days = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
     const slotPrice = timeSlotDoc.price * days;
     const commission = settings.bookingCommission * days;
-    const totalAmount = slotPrice + commission; // Now properly defined
+    const totalAmount = slotPrice + commission;
 
-    // Wallet handling
     let wallet = await Wallet.findOne({ user: userId }).session(session);
     if (!wallet) {
       wallet = new Wallet({ user: userId, balance: 0 });
@@ -228,8 +405,7 @@ export const createBooking = async (req, res) => {
 
     if (wallet.balance < totalAmount) {
       await session.abortTransaction();
-      await session.endSession();
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
         message: "Insufficient balance",
         required: totalAmount,
@@ -237,11 +413,10 @@ export const createBooking = async (req, res) => {
       });
     }
 
-    // Rest of your code remains the same...
+    // Deduct balance
     wallet.balance -= totalAmount;
     await wallet.save({ session });
 
-    // Create transaction
     const transaction = await processPayment(
       userId,
       totalAmount,
@@ -252,8 +427,9 @@ export const createBooking = async (req, res) => {
 
     // Create bookings
     const bookings = [];
-    for (let date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
-      const bookingDate = new Date(date);
+    let loopDate = new Date(start);
+    while (loopDate <= end) {
+      const bookingDate = new Date(loopDate);
       bookingDate.setHours(0, 0, 0, 0);
 
       const fullAmount = timeSlotDoc.price + settings.bookingCommission;
@@ -274,15 +450,16 @@ export const createBooking = async (req, res) => {
 
       await booking.save({ session });
       bookings.push(booking);
+
+      loopDate = new Date(loopDate.getTime() + 24 * 60 * 60 * 1000);
     }
 
-    // Update transaction with booking IDs
     transaction.bookings = bookings.map(b => b._id);
     await transaction.save({ session });
 
     await session.commitTransaction();
 
-    // Get populated bookings
+    // Populate bookings
     const populatedBookings = await Booking.find({
       _id: { $in: bookings.map(b => b._id) }
     })
@@ -293,12 +470,12 @@ export const createBooking = async (req, res) => {
 
     // Send notifications
     for (const booking of populatedBookings) {
-      await notifyBookingUpdate(booking, 'booking-created');
+      await notifyBookingUpdate(booking, "booking-created");
     }
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
-      message: `Created ${populatedBookings.length} bookings`,
+      message: `Created ${bookings.length} bookings`,
       bookings: populatedBookings,
       transaction,
       summary: { totalDays: days, slotPrice, commission, totalAmount }
@@ -309,15 +486,16 @@ export const createBooking = async (req, res) => {
       await session.abortTransaction();
     }
     console.error("Booking error:", error);
-    res.status(500).json({ 
+    return res.status(500).json({
       success: false,
-      message: error.message,
-      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      message: `Booking error: ${error.message}`,
+      error: process.env.NODE_ENV === "development" ? error.stack : undefined
     });
   } finally {
     await session.endSession();
   }
 };
+
 
 // Get bookings for a user
 export const getUserBookings = async (req, res) => {
