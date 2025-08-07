@@ -695,6 +695,9 @@ export const adminStats = async (req, res) => {
 // };
 
 // Librarian Dashboard Stats
+
+
+
 export const librarianStats = async (req, res) => {
   try {
     const librarianId = req.user._id;
@@ -867,11 +870,7 @@ export const librarianStats = async (req, res) => {
     res.status(200).json({
       success: true,
       data: {
-        library: {
-          name: library.libraryName,
-          description: library.description,
-          logo: library.logo
-        },
+        library:library,
         counts: {
           bookings: totalBookings,
           attendances: totalAttendances,

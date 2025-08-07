@@ -1,7 +1,7 @@
 import Library from "../model/LibraryModel.js";
 import User from "../model/User.js";
 import bcrypt from "bcryptjs";
-import fs from 'fs';
+import fs, { stat } from 'fs';
 import path from 'path';
 import { findDistanceBetweenLatAndLon, findDistanceBetweenPins, getLatLngFromAddress } from "../services/locationService.js";
 import { generateQRCode } from "../utils/qrCodeHelper.js";
@@ -446,13 +446,53 @@ export const togglePopularLibrary = async (req, res) => {
     await library.save();
     
     res.status(200).json({
-      message: `Library marked as ${library.isPopular ? 'popular' : 'not popular'} successfully`,
+      message: `Library marked as ${library.isPopular ? 'popular' : 'not popular'}.`,
       isPopular: library.isPopular,
       success: true
     });
   } catch (error) {
     res.status(500).json({
       message: "Failed to toggle popular status",
+      error: error.message,
+      success: false
+    });
+  }
+};
+
+// update library status like ["pending", "in_review", "approved", "rejected"],
+export const updateLibraryStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    const library = await Library.findById(id);
+    
+    if (!library) {
+      return res.status(404).json({
+        message: "Library not found",
+        success: false
+      });
+    }
+    
+    if(!status){
+      return res.status(404).json({
+        success:false,
+        message:"Please provide a status which you wants to update"
+      })
+    }
+
+    library.status = status;
+
+    await library.save();
+    
+    res.status(200).json({
+      message: `Library status marked as ${library.status}.`,
+      isPopular: library.isPopular,
+      success: true
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Failed to update library status",
       error: error.message,
       success: false
     });
@@ -837,6 +877,7 @@ export const getLibrariesByAddress = async (req, res) => {
     // Find matching libraries
     const libraries = await Library.find({
       location: { $regex: address, $options: 'i' },
+      status:"approved",
       isBlocked: false
     })
     .populate('libraryType')
@@ -934,7 +975,7 @@ export const getNearestLibrariesByPinCode = async (req, res) => {
   try {
     const today = new Date().toISOString().split('T')[0];
     
-    const libraries = await Library.find({ isBlocked: false })
+    const libraries = await Library.find({ status:"approved", isBlocked: false })
       .populate('libraryType')
       .populate('services');
 
@@ -1033,7 +1074,7 @@ export const getNearestLibrariesByLatLon = async (req, res) => {
   try {
     const today = new Date().toISOString().split('T')[0];
     
-    const libraries = await Library.find({ isBlocked: false })
+    const libraries = await Library.find({ status:"approved", isBlocked: false })
       .populate('libraryType')
       .populate('services');
 

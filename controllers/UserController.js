@@ -70,19 +70,19 @@ export const loginUser = async (req, res) => {
       });
     }
 
-    const user = await User.findOne({email});
+    const user = await User.findOne({ email });
     // console.log(user)
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: "user na hai",
+        message: "Invalid email || Please enter a registered email id",
       });
     }
 
     if (user.role !== role) {
       return res.status(403).json({
         success: false,
-        message: `Invalid role for this user. Expected ${user.role}`,
+        message: `Invalid credentials for this user.`,
       });
     }
 
@@ -112,20 +112,53 @@ export const loginUser = async (req, res) => {
     let libraryResponse = null;
     if (user.role == "librarian") {
       const library = await Library.findOne({ librarian: user._id });
-      if (library) {
-        libraryResponse = {
-          _id: library._id,
-          libraryName: library.libraryName,
-        };
+      if (!library) {
+       return res.status(404).json({
+          success: false,
+          message: `Library is not found for this email ${email}`
+        })
+      }
+      if (library.isBlocked) {
+       return res.status(400).json({
+          success: false,
+          message: `Your Library has been blocked by admin.`,
+          suggestion: `For activation of your library contact to bookmyspace.today.`
+        })
+      }
+      // if (library.status === "pending") {
+      //  return res.status(400).json({
+      //     success: false,
+      //     message: `Your Library is pending || So you can't login yet.`,
+      //     suggestion: `Admin bookmyspace.today will be approved after review of it.`
+      //   })
+      // }
+      // if (library.status === "in_review") {
+      //  return res.status(400).json({
+      //     success: false,
+      //     message: `Your Library is in_review.`,
+      //     suggestion: `Admin bookmyspace.today will be approved after successfull review of it.`
+      //   })
+      // }
+      // if (library.status === "rejected") {
+      //  return res.status(400).json({
+      //     success: false,
+      //     message: `Your Library has been rejected by admin.`,
+      //     suggestion: `For approval of your library contact to bookmyspace.today..`
+      //   })
+      // }
+      libraryResponse = {
+        _id: library._id,
+        libraryName: library.libraryName,
       }
     }
 
+    
     res.status(200).json({
       success: true,
       message: "Login successful. Please verify OTP to continue.",
       token,
       user: userResponse,
-      library: libraryResponse,
+      ...(libraryResponse && { library: libraryResponse }),
       otp: STATIC_OTP, // Send the static OTP here
     });
 
@@ -139,6 +172,135 @@ export const loginUser = async (req, res) => {
   }
 };
 
+
+
+// it for only those libraries can login which are approved or active/not-blocked
+
+// const STATIC_OTP = "123456";
+// export const loginUser = async (req, res) => {
+//   const { email, password, role } = req.body;
+
+//   try {
+//     // 1. Validate Input
+//     if (!email || !password || !role) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Email, password, and role are required.",
+//       });
+//     }
+
+//     // 2. Check if user exists
+//     const user = await User.findOne({ email });
+//     if (!user) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Email not registered. Please check or sign up first.",
+//       });
+//     }
+
+//     // 3. Role validation
+//     if (user.role !== role) {
+//       return res.status(403).json({
+//         success: false,
+//         message: "Invalid credencials for this user.",
+//       });
+//     }
+
+//     // 4. Block check
+//     if (user.isBlocked) {
+//       return res.status(403).json({
+//         success: false,
+//         message: "Your account has been blocked. Please contact support.",
+//       });
+//     }
+
+//     // 5. Password validation
+//     const isPasswordValid = await bcrypt.compare(password, user.password);
+//     if (!isPasswordValid) {
+//       return res.status(401).json({
+//         success: false,
+//         message: "Invalid password.",
+//       });
+//     }
+
+//     // 6. JWT Token
+//     const token = jwt.sign(
+//       { id: user._id, role: user.role },
+//       process.env.JWT_SECRET,
+//       { expiresIn: "7d" }
+//     );
+
+//     const { password: _, ...userResponse } = user.toObject();
+
+//     // 7. Librarian-specific library checks
+//     let libraryResponse = null;
+
+//     if (user.role === "librarian") {
+//       const library = await Library.findOne({ librarian: user._id });
+
+//       if (!library) {
+//         return res.status(404).json({
+//           success: false,
+//           message: `No library found for email: ${email}.`,
+//         });
+//       }
+
+//       if (library.isBlocked) {
+//         return res.status(403).json({
+//           success: false,
+//           message: "Your library has been blocked by the admin.",
+//           suggestion: "Please contact bookmyspace.today for more information.",
+//         });
+//       }
+
+//       const statusMessages = {
+//         pending: {
+//           message: "Your library is still pending approval.",
+//           suggestion: "Admin will review and approve it shortly.",
+//         },
+//         in_review: {
+//           message: "Your library is currently under review.",
+//           suggestion: "Please wait while the admin completes the review.",
+//         },
+//         rejected: {
+//           message: "Your library has been rejected by the admin.",
+//           suggestion: "Contact bookmyspace.today for more details or appeal.",
+//         },
+//       };
+
+//       if (statusMessages[library.status]) {
+//         return res.status(403).json({
+//           success: false,
+//           message: statusMessages[library.status].message,
+//           suggestion: statusMessages[library.status].suggestion,
+//         });
+//       }
+
+//       libraryResponse = {
+//         _id: library._id,
+//         libraryName: library.libraryName,
+//       };
+//     }
+
+//     // 8. Single Response for All Roles
+//     return res.status(200).json({
+//       success: true,
+//       message: "Login successful. OTP sent for verification.",
+//       token,
+//       user: userResponse,
+//       ...(libraryResponse && { library: libraryResponse }),
+//       otp: STATIC_OTP, // ⚠️ Only for testing – never send in production
+//     });
+
+//   } catch (error) {
+//     console.error(`Login error for email: ${email}`, error);
+//     return res.status(500).json({
+//       success: false,
+//       message: "Something went wrong during login.",
+//       error: error.message,
+//     });
+//   }
+// };
 
 export const verifyOtp = async (req, res) => {
   const { otp } = req.body;
@@ -154,7 +316,7 @@ export const verifyOtp = async (req, res) => {
     if (otp !== "123456") { // Compare with static OTP
       return res.status(401).json({
         success: false,
-        message: "Invalid OTP",
+        message: "Invalid OTP || So you can't login",
       });
     }
 

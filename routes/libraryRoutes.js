@@ -12,7 +12,8 @@ import {
   getMyLibrary,
   getNearestLibrariesByPinCode,
   getNearestLibrariesByLatLon,
-  getLibraryQRCode
+  getLibraryQRCode,
+  updateLibraryStatus
 } from "../controllers/libraryController.js";
 import { upload } from "../middleware/uploadMiddleware.js";
 import { adminOnly, librarianOnly, protect } from "../middleware/authMiddleware.js";
@@ -43,6 +44,7 @@ router.get("/:id", getLibraryById);
 router.put("/update/:id", protect, librarianOnly, multiUpload, updateLibrary);
 router.patch("/block/:id/toggle", protect, adminOnly, toggleBlockLibrary);
 router.patch("/popular/:id/toggle", protect, adminOnly, togglePopularLibrary);
+router.patch("/:id/status", protect, adminOnly, updateLibraryStatus);
 router.delete("/:id/delete", protect, adminOnly, deleteLibrary);
 
 

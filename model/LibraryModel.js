@@ -35,6 +35,11 @@ const librarySchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  status:{
+    type:String,
+    enum:["pending", "in_review", "approved", "rejected"],
+    default:"pending"
+  },
    qrCode: {
     type: String,
     default: null
