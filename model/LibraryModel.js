@@ -22,6 +22,10 @@ const librarySchema = new mongoose.Schema({
   images: [String],
   location: String,
   pinCode:String,
+  coordinates: {
+    lat: String,
+    lng: String
+  },
   contactNumber: String,
   email: { type: String, required: true },
   timingFrom: String,
