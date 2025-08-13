@@ -16,12 +16,12 @@ export const createLibrary = async (req, res) => {
     const {
       librarianName, librarianEmail, librarianMobile, password,
       libraryName, libraryType, description, location,  pinCode,
-      contactNumber, email, timingFrom,
+      latitude, longitude, contactNumber, email, timingFrom,
       timingTo, services, totalBooks, userMotions
     } = req.body;
-   
+  //  console.log(latitude, longitude, location, pinCode)
     // Validate required fields
-    if (!librarianName || !librarianEmail || !password || !libraryName || !libraryType || !pinCode) {
+    if (!librarianName || !librarianEmail || !password || !libraryName || !libraryType || !pinCode || !latitude || !longitude) {
       return res.status(400).json({
         success: false,
         message: "Required fields are missing"
@@ -72,6 +72,10 @@ export const createLibrary = async (req, res) => {
       description, 
       location,
       pinCode,
+  coordinates: {
+    lat: latitude,
+    lng: longitude
+  },
       contactNumber, 
       email, 
       timingFrom,
@@ -261,7 +265,7 @@ export const updateLibrary = async (req, res) => {
   try {
     const { id } = req.params;
     const updateData = req.body;
-    
+
     // Find the existing library first
     const existingLibrary = await Library.findById(id);
     if (!existingLibrary) {
@@ -460,6 +464,7 @@ export const togglePopularLibrary = async (req, res) => {
 };
 
 // update library status like ["pending", "in_review", "approved", "rejected"],
+
 export const updateLibraryStatus = async (req, res) => {
   try {
     const { id } = req.params;
@@ -1058,11 +1063,120 @@ export const getNearestLibrariesByPinCode = async (req, res) => {
   }
 };
 
+// export const getNearestLibrariesByLatLon = async (req, res) => {
+//   let { userLat, userLon } = req.body;
+
+//   userLat = parseFloat(userLat);
+//   userLon = parseFloat(userLon);
+
+//   if (!userLat || !userLon) {
+//     return res.status(400).json({ 
+//       success: false,
+//       message: 'User latitude and longitude are required' 
+//     });
+//   }
+
+//   try {
+//     const today = new Date().toISOString().split('T')[0];
+    
+//     const libraries = await Library.find({ status:"approved", isBlocked: false })
+//       .populate('libraryType')
+//       .populate('services');  
+// console.log(libraries.length)
+//     const enrichedLibraries = [];
+
+//     for (const library of libraries) {
+//       if (!library.location) continue;
+
+//       try {
+//         const libLocation = await getLatLngFromAddress(library.location);
+//         if (!libLocation || !libLocation.lat || !libLocation.lon) {
+//           console.warn(`No lat/lon for address: ${library.location}`);
+//           continue;
+//         }
+
+//         const distance = await findDistanceBetweenLatAndLon(
+//           userLat, userLon, 
+//           libLocation.lat, libLocation.lon
+//         );
+
+//         // Get all active seats for this library
+//         const seats = await Seat.find({ 
+//           library: library._id,
+//           isActive: true 
+//         });
+
+//         // Get all time slots for this library with populated seats
+//         const timeSlots = await TimeSlot.find({
+//           library: library._id,
+//           isActive: true
+//         }).populate('seats');
+
+//         // Get all bookings for today for these seats
+//         const todayBookings = await Booking.find({
+//           seat: { $in: seats.map(s => s._id) },
+//           bookingDate: today,
+//           status: { $ne: 'cancelled' }
+//         });
+
+//         const bookedSlotIds = new Set(todayBookings.map(b => b.timeSlot.toString()));
+
+//         // For each seat, find available timeslots
+//         const seatsWithAvailability = seats.map(seat => {
+//           const availableSlots = timeSlots
+//             .filter(slot => 
+//               slot.seats.some(s => s._id.toString() === seat._id.toString()) &&
+//               !bookedSlotIds.has(slot._id.toString())
+//             )
+//             .sort((a, b) => a.startTime.localeCompare(b.startTime))
+//             .map(slot => ({
+//               _id: slot._id,
+//               startTime: slot.startTime,
+//               endTime: slot.endTime,
+//               price: slot.price
+//             }));
+
+//           return {
+//             ...seat.toObject(),
+//             availableSlots
+//           };
+//         });
+
+//         enrichedLibraries.push({
+//           ...library._doc,
+//           distanceInKm: Number(distance.toFixed(2)),
+//           seats: seatsWithAvailability
+//         });
+
+//       } catch (err) {
+//         console.warn(`Skipping library [${library.libraryName}] due to error:`, err.message);
+//       }
+//     }
+
+//     // Sort by distance
+//     enrichedLibraries.sort((a, b) => a.distanceInKm - b.distanceInKm);
+
+//     res.status(200).json({
+//       success: true,
+//       data: enrichedLibraries
+//     });
+
+//   } catch (error) {
+//     console.error('❌ Error in nearest libraries:', error.message);
+//     res.status(500).json({ 
+//       success: false,
+//       message: 'Failed to fetch nearby libraries',
+//       error: error.message
+//     });
+//   }
+// };
+
 export const getNearestLibrariesByLatLon = async (req, res) => {
   let { userLat, userLon } = req.body;
 
   userLat = parseFloat(userLat);
   userLon = parseFloat(userLon);
+  const MAX_DISTANCE_KM = 20; // 20km radius
 
   if (!userLat || !userLon) {
     return res.status(400).json({ 
@@ -1074,26 +1188,51 @@ export const getNearestLibrariesByLatLon = async (req, res) => {
   try {
     const today = new Date().toISOString().split('T')[0];
     
-    const libraries = await Library.find({ status:"approved", isBlocked: false })
-      .populate('libraryType')
-      .populate('services');
+    // First get all approved, unblocked libraries
+    const libraries = await Library.find({ 
+      status: "approved", 
+      isBlocked: false 
+    })
+    .populate('libraryType')
+    .populate('services');
 
     const enrichedLibraries = [];
 
     for (const library of libraries) {
-      if (!library.location) continue;
-
       try {
-        const libLocation = await getLatLngFromAddress(library.location);
-        if (!libLocation || !libLocation.lat || !libLocation.lon) {
-          console.warn(`No lat/lon for address: ${library.location}`);
+        let libLat, libLon;
+        
+        // Check if coordinates exist in the library document
+        if (library.coordinates && library.coordinates.lat && library.coordinates.lng) {
+          libLat = parseFloat(library.coordinates.lat);
+          libLon = parseFloat(library.coordinates.lng);
+        } 
+        // Fallback to geocoding the address if coordinates don't exist
+        else if (library.location) {
+          const libLocation = await getLatLngFromAddress(library.location);
+          if (!libLocation || !libLocation.lat || !libLocation.lon) {
+            console.warn(`No coordinates for library: ${library.libraryName}`);
+            continue;
+          }
+          libLat = libLocation.lat;
+          libLon = libLocation.lon;
+        } 
+        // Skip if no coordinates or address
+        else {
+          console.warn(`No coordinates or address for library: ${library.libraryName}`);
           continue;
         }
 
+        // Calculate distance
         const distance = await findDistanceBetweenLatAndLon(
           userLat, userLon, 
-          libLocation.lat, libLocation.lon
+          libLat, libLon
         );
+
+        // Skip libraries beyond 20km radius
+        if (distance > MAX_DISTANCE_KM) {
+          continue;
+        }
 
         // Get all active seats for this library
         const seats = await Seat.find({ 
@@ -1148,7 +1287,7 @@ export const getNearestLibrariesByLatLon = async (req, res) => {
       }
     }
 
-    // Sort by distance
+    // Sort by distance (nearest first)
     enrichedLibraries.sort((a, b) => a.distanceInKm - b.distanceInKm);
 
     res.status(200).json({
@@ -1165,4 +1304,3 @@ export const getNearestLibrariesByLatLon = async (req, res) => {
     });
   }
 };
-
