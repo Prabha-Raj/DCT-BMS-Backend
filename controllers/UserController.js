@@ -125,6 +125,7 @@ export const loginUser = async (req, res) => {
           suggestion: `For activation of your library contact to bookmyspace.today.`
         })
       }
+      
       // if (library.status === "pending") {
       //  return res.status(400).json({
       //     success: false,
@@ -146,6 +147,7 @@ export const loginUser = async (req, res) => {
       //     suggestion: `For approval of your library contact to bookmyspace.today..`
       //   })
       // }
+      
       libraryResponse = {
         _id: library._id,
         libraryName: library.libraryName,
