@@ -19,7 +19,7 @@ export const protect = async (req, res, next) => {
         return res.status(401).json({ message: "User not found || Invalid token" });
       }
       // console.log(user.tokenVersion, decoded.tokenVersion)
-      if (!user || user.tokenVersion !== decoded.tokenVersion) {
+      if (user.tokenVersion !== decoded.tokenVersion) {
         return res.status(401).json({ message: "Token expired or invalid" });
       }
 

@@ -61,8 +61,9 @@ export const createUser = async (req, res) => {
 const STATIC_OTP = "123456";
 export const loginUser = async (req, res) => {
   const { email, password, role } = req.body;
-  // console.log(email, password, role)
+
   try {
+    // Input validation
     if (!email || !password || !role) {
       return res.status(400).json({
         success: false,
@@ -70,8 +71,8 @@ export const loginUser = async (req, res) => {
       });
     }
 
+    // Find user
     const user = await User.findOne({ email });
-    // console.log(user)
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -79,6 +80,7 @@ export const loginUser = async (req, res) => {
       });
     }
 
+    // Role validation
     if (user.role !== role) {
       return res.status(403).json({
         success: false,
@@ -86,6 +88,7 @@ export const loginUser = async (req, res) => {
       });
     }
 
+    // Account status check
     if (user.isBlocked) {
       return res.status(403).json({
         success: false,
@@ -93,6 +96,7 @@ export const loginUser = async (req, res) => {
       });
     }
 
+    // Password validation
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       return res.status(401).json({
@@ -101,24 +105,23 @@ export const loginUser = async (req, res) => {
       });
     }
 
-    // const token = jwt.sign(
-    //   { id: user._id, role: user.role },
-    //   process.env.JWT_SECRET,
-    //   { expiresIn: "7d" }
-    // );
+    // Token generation - FIRST save the user, THEN generate token
+    user.tokenVersion += 1;
+    await user.save(); // Save the incremented version first
 
-
-    //  new way to manage token 
-
-        user.tokenVersion += 1;
     const token = jwt.sign(
-      { id: user._id, role: user.role, tokenVersion: user.tokenVersion },
-      process.env.JWT_SECRET
+      { 
+        id: user._id, 
+        role: user.role, 
+        tokenVersion: user.tokenVersion // Use the updated version
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
     );
-
 
     const { password: _, ...userResponse } = user.toObject();
 
+    // Library handling (unchanged)
     let libraryResponse = null;
     if (user.role == "librarian") {
       const library = await Library.findOne({ librarian: user._id });
@@ -126,46 +129,20 @@ export const loginUser = async (req, res) => {
         return res.status(404).json({
           success: false,
           message: `Library is not found for this email ${email}`
-        })
+        });
       }
       if (library.isBlocked) {
         return res.status(400).json({
           success: false,
           message: `Your Library has been blocked by admin.`,
           suggestion: `For activation of your library contact to bookmyspace.today.`
-        })
+        });
       }
-
-      // if (library.status === "pending") {
-      //  return res.status(400).json({
-      //     success: false,
-      //     message: `Your Library is pending || So you can't login yet.`,
-      //     suggestion: `Admin bookmyspace.today will be approved after review of it.`
-      //   })
-      // }
-      // if (library.status === "in_review") {
-      //  return res.status(400).json({
-      //     success: false,
-      //     message: `Your Library is in_review.`,
-      //     suggestion: `Admin bookmyspace.today will be approved after successfull review of it.`
-      //   })
-      // }
-      // if (library.status === "rejected") {
-      //  return res.status(400).json({
-      //     success: false,
-      //     message: `Your Library has been rejected by admin.`,
-      //     suggestion: `For approval of your library contact to bookmyspace.today..`
-      //   })
-      // }
-
       libraryResponse = {
         _id: library._id,
         libraryName: library.libraryName,
-      }
+      };
     }
-
-
-    await user.save();
 
     res.status(200).json({
       success: true,
@@ -173,7 +150,7 @@ export const loginUser = async (req, res) => {
       token,
       user: userResponse,
       ...(libraryResponse && { library: libraryResponse }),
-      otp: STATIC_OTP, // Send the static OTP here
+      otp: STATIC_OTP,
     });
 
   } catch (error) {
