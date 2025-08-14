@@ -36,7 +36,7 @@ router.post("/create", (req, res, next) => {
 router.get("/for-admin", protect, adminOnly,getAllLibrariesForAdmin);
 router.get("/for-students", getAllLibrariesForStudents);
 router.get('/search', getLibrariesByAddress);
-router.get('/nearme', protect, getNearestLibrariesByLatLon);
+router.get('/nearme', getNearestLibrariesByLatLon);
 router.get('/qr-code', protect, librarianOnly, getLibraryQRCode);
 router.get('/:pincode/nearest', getNearestLibrariesByPinCode);
 router.get("/my-library", protect, librarianOnly, getMyLibrary);
