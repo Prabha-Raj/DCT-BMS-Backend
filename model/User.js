@@ -31,7 +31,12 @@ const UserSchema = new mongoose.Schema(
     isBlocked:{
       type:Boolean,
       default:false
-    }
+    },
+  tokenVersion: {
+    type: Number,
+    required:true,
+    default: 0 // हर user का start version 0 रहेगा
+  }
   },
   { timestamps: true }
 );

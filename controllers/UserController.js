@@ -101,11 +101,21 @@ export const loginUser = async (req, res) => {
       });
     }
 
+    // const token = jwt.sign(
+    //   { id: user._id, role: user.role },
+    //   process.env.JWT_SECRET,
+    //   { expiresIn: "7d" }
+    // );
+
+
+    //  new way to manage token 
+
+        user.tokenVersion += 1;
     const token = jwt.sign(
-      { id: user._id, role: user.role },
-      process.env.JWT_SECRET,
-      { expiresIn: "7d" }
+      { id: user._id, role: user.role, tokenVersion: user.tokenVersion },
+      process.env.JWT_SECRET
     );
+
 
     const { password: _, ...userResponse } = user.toObject();
 
@@ -113,19 +123,19 @@ export const loginUser = async (req, res) => {
     if (user.role == "librarian") {
       const library = await Library.findOne({ librarian: user._id });
       if (!library) {
-       return res.status(404).json({
+        return res.status(404).json({
           success: false,
           message: `Library is not found for this email ${email}`
         })
       }
       if (library.isBlocked) {
-       return res.status(400).json({
+        return res.status(400).json({
           success: false,
           message: `Your Library has been blocked by admin.`,
           suggestion: `For activation of your library contact to bookmyspace.today.`
         })
       }
-      
+
       // if (library.status === "pending") {
       //  return res.status(400).json({
       //     success: false,
@@ -147,14 +157,16 @@ export const loginUser = async (req, res) => {
       //     suggestion: `For approval of your library contact to bookmyspace.today..`
       //   })
       // }
-      
+
       libraryResponse = {
         _id: library._id,
         libraryName: library.libraryName,
       }
     }
 
-    
+
+    await user.save();
+
     res.status(200).json({
       success: true,
       message: "Login successful. Please verify OTP to continue.",
