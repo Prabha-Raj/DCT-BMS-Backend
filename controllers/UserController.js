@@ -117,7 +117,7 @@ export const loginUser = async (req, res) => {
         // Use the updated version
       },
       process.env.JWT_SECRET,
-      { expiresIn: "7d" }
+      { expiresIn: "100000d" }
     );
 
     const { password: _, ...userResponse } = user.toObject();

@@ -69,7 +69,6 @@ const checkBookingConflicts = async (seat, timeSlot, libraryId, start, end, sess
 
   // Extract and format just the conflicting dates within the requested range
   const conflictingDates = conflicts.map(booking => {
-    // Ensure bookingDate is properly converted to Date object
     const bookingDate = new Date(booking.bookingDate);
     return formatDateString(bookingDate);
   }).filter(date => date !== null);
@@ -110,9 +109,9 @@ const createBookings = async (userId, seatDoc, timeSlotDoc, settings, start, end
       bookingDate,
       status: "confirmed",
       paymentStatus: "paid",
-      amount: timeSlotDoc.price,
+      amount: Number(timeSlotDoc.price), // Ensure price is number
       commission: settings.bookingCommission,
-      totalAmount: timeSlotDoc.price + settings.bookingCommission,
+      totalAmount: Number(timeSlotDoc.price) + settings.bookingCommission,
       paymentId: transaction._id
     });
 
@@ -179,13 +178,18 @@ export const createBooking = async (req, res) => {
 
       // Calculate exact number of days
       const days = countDaysBetweenDates(start, end);
+      
+      // Calculate amounts based on days
+      const slotPrice = Number(timeSlotDoc.price) * days; // Ensure price is number
+      const commission = settings.bookingCommission * days;
+      const totalAmount = slotPrice + commission;
 
-      // Create transaction with temporary amount
+      // Process payment with actual amount FIRST
       const transaction = await processPayment(
         userId,
-        0, // Will update after creating bookings
-        `Booking at ${seatDoc.library}`,
-        [],
+        totalAmount,
+        `Booking for ${days} day(s) at ${seatDoc.library}`,
+        [], // Will update after creating bookings
         session
       );
 
@@ -194,15 +198,7 @@ export const createBooking = async (req, res) => {
         userId, seatDoc, timeSlotDoc, settings, start, end, transaction, session
       );
 
-      // Calculate final amounts based on actual bookings
-      const actualDays = bookings.length;
-      const slotPrice = timeSlotDoc.price * actualDays;
-      const commission = settings.bookingCommission * actualDays;
-      const totalAmount = slotPrice + commission;
-
-      // Update transaction with final values
-      transaction.amount = totalAmount;
-      transaction.description = `Booking for ${actualDays} day(s) at ${seatDoc.library}`;
+      // Update transaction with booking IDs
       transaction.bookings = bookings.map(b => b._id);
       await transaction.save({ session });
 
@@ -211,7 +207,7 @@ export const createBooking = async (req, res) => {
         transaction,
         bookingIds: bookings.map(b => b._id),
         summary: { 
-          totalDays: actualDays, 
+          totalDays: days, 
           slotPrice, 
           commission, 
           totalAmount 
@@ -258,5 +254,3 @@ export const createBooking = async (req, res) => {
     await session.endSession();
   }
 };
-
-

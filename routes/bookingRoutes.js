@@ -18,7 +18,6 @@ router.use(protect);
 
 router.route('/')
   .post(studentOnly, createBooking)
-  // .post(studentOnly, createBooking)
   .get(adminOnly, getAllBookings);
 
   
