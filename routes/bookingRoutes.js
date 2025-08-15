@@ -1,6 +1,6 @@
 import express from 'express';
 import {
-  createBooking,
+  // createBooking,
   getUserBookings,
   getLibraryBookings,
   updateBookingStatus,
@@ -10,6 +10,7 @@ import {
   getBookingsByLibraryAndUser
 } from '../controllers/bookingController.js';
 import { protect, studentOnly, librarianOnly, adminOnly } from '../middleware/authMiddleware.js';
+import { createBooking } from '../controllers/bookingControllerNew.js';
 
 const router = express.Router();
 
@@ -17,6 +18,7 @@ router.use(protect);
 
 router.route('/')
   .post(studentOnly, createBooking)
+  // .post(studentOnly, createBooking)
   .get(adminOnly, getAllBookings);
 
   
