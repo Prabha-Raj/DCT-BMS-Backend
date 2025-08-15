@@ -164,6 +164,8 @@ export const getAllLibrariesForStudents = async (req, res) => {
     if (search) {
       query.$or = [
         { libraryName: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+        { pinCode: { $regex: search, $options: 'i' } },
         { location: { $regex: search, $options: 'i' } }
       ];
     }
@@ -592,281 +594,6 @@ export const getLibraryQRCode = async (req, res) => {
   }
 };
 
-// Example optimization for getLibrariesByAddress:
-
-// export const getLibrariesByAddress = async (req, res) => {
-//   try {
-//     const { address } = req.query;
-//     if (!address) {
-//       return res.status(400).json({ 
-//         success: false,
-//         message: 'Address query is required' 
-//       });
-//     }
-
-//     // Get today's date once
-//     const today = new Date().toISOString().split('T')[0];
-
-//     // First get just library IDs that match the address
-//     const matchingLibraries = await Library.find({
-//       location: { $regex: address, $options: 'i' },
-//       isBlocked: false
-//     }).select('_id').lean();
-
-//     if (!matchingLibraries.length) {
-//       return res.status(200).json({
-//         success: true,
-//         data: []
-//       });
-//     }
-
-//     const libraryIds = matchingLibraries.map(lib => lib._id);
-
-//     // Then get the full data in parallel
-//     const [libraries, allSeats] = await Promise.all([
-//       Library.find({ _id: { $in: libraryIds } })
-//         .populate('libraryType')
-//         .populate('services')
-//         .lean(),
-//       Seat.find({ 
-//         library: { $in: libraryIds },
-//         isActive: true 
-//       }).lean()
-//     ]);
-
-//     // Get all booked slots for today in one query
-//     const bookedSlots = await Booking.find({
-//       seat: { $in: allSeats.map(s => s._id) },
-//       bookingDate: today,
-//       status: { $ne: 'cancelled' }
-//     }).select('timeSlot').lean();
-
-//     const bookedSlotIds = bookedSlots.map(s => s.timeSlot.toString());
-
-//     // Get all available timeslots in one query
-//     const availableSlots = await TimeSlot.find({
-//       isActive: true,
-//       _id: { $nin: bookedSlotIds }
-//     }).sort({ startTime: 1 }).lean();
-
-//     // Group seats by library
-//     const seatsByLibrary = allSeats.reduce((acc, seat) => {
-//       if (!acc[seat.library]) acc[seat.library] = [];
-//       acc[seat.library].push(seat);
-//       return acc;
-//     }, {});
-
-//     // Build response
-//     const response = libraries.map(library => ({
-//       ...library,
-//       distanceInKm: 0, // You'll need to calculate this if needed
-//       seats: (seatsByLibrary[library._id] || []).map(seat => ({
-//         ...seat,
-//         availableSlots: availableSlots.filter(slot => 
-//           // Add any seat-specific slot filtering here
-//           true
-//         )
-//       }))
-//     }));
-
-//     res.status(200).json({
-//       success: true,
-//       data: response
-//     });
-
-//   } catch (error) {
-//     console.error('Error:', error);
-//     res.status(500).json({
-//       success: false,
-//       message: 'Server error',
-//       error: process.env.NODE_ENV === 'development' ? error.message : undefined
-//     });
-//   }
-// };
-
-// export const getNearestLibrariesByPinCode = async (req, res) => {
-//   const { pincode } = req.params;
-//   const userPinCode = pincode;
-
-//   if (!userPinCode) {
-//     return res.status(400).json({ 
-//       success: false,
-//       message: 'User PIN code is required' 
-//     });
-//   }
-
-//   try {
-//     const today = new Date().toISOString().split('T')[0];
-    
-//     const libraries = await Library.find({ isBlocked: false })
-//       .populate('libraryType')
-//       .populate('services');
-
-//     const enrichedLibraries = [];
-
-//     for (const library of libraries) {
-//       if (!library.pinCode) continue;
-
-//       try {
-//         const distance = await findDistanceBetweenPins(userPinCode, library.pinCode);
-        
-//         // Find all active seats for this library
-//         const seats = await Seat.find({ 
-//           library: library._id,
-//           isActive: true 
-//         });
-
-//         // For each seat, find available timeslots for today
-//         const seatsWithAvailability = await Promise.all(seats.map(async (seat) => {
-//           const availableSlots = await TimeSlot.aggregate([
-//             {
-//               $match: {
-//                 isActive: true,
-//                 _id: {
-//                   $nin: await Booking.find({
-//                     seat: seat._id,
-//                     bookingDate: today,
-//                     status: { $ne: 'cancelled' }
-//                   }).distinct('timeSlot')
-//                 }
-//               }
-//             },
-//             { $sort: { startTime: 1 } }
-//           ]);
-
-//           return {
-//             ...seat.toObject(),
-//             availableSlots
-//           };
-//         }));
-
-//         enrichedLibraries.push({
-//           ...library._doc,
-//           distanceInKm: distance,
-//           seats: seatsWithAvailability
-//         });
-
-//       } catch (err) {
-//         console.warn(`Skipping library with pin ${library.pinCode}:`, err.message);
-//       }
-//     }
-
-//     // Sort by distance
-//     enrichedLibraries.sort((a, b) => a.distanceInKm - b.distanceInKm);
-
-//     res.status(200).json({
-//       success: true,
-//       data: enrichedLibraries
-//     });
-
-//   } catch (error) {
-//     console.error('❌ Error in nearest libraries:', error.message);
-//     res.status(500).json({ 
-//       success: false,
-//       message: 'Failed to fetch nearby libraries',
-//       error: error.message
-//     });
-//   }
-// };
-
-// export const getNearestLibrariesByLatLon = async (req, res) => {
-//   let { userLat, userLon } = req.body;
-
-//   // Convert to number (if sent as string)
-//   userLat = parseFloat(userLat);
-//   userLon = parseFloat(userLon);
-
-//   if (!userLat || !userLon) {
-//     return res.status(400).json({ 
-//       success: false,
-//       message: 'User latitude and longitude are required' 
-//     });
-//   }
-
-//   try {
-//     const today = new Date().toISOString().split('T')[0];
-    
-//     const libraries = await Library.find({ isBlocked: false })
-//       .populate('libraryType')
-//       .populate('services');
-
-//     const enrichedLibraries = [];
-
-//     for (const library of libraries) {
-//       if (!library.location) continue;
-
-//       try {
-//         const libLocation = await getLatLngFromAddress(library.location);
-//         if (!libLocation || !libLocation.lat || !libLocation.lon) {
-//           console.warn(`No lat/lon for address: ${library.location}`);
-//           continue;
-//         }
-
-//         const distance = await findDistanceBetweenLatAndLon(
-//           userLat, userLon, 
-//           libLocation.lat, libLocation.lon
-//         );
-
-//         // Find all active seats for this library
-//         const seats = await Seat.find({ 
-//           library: library._id,
-//           isActive: true 
-//         });
-
-//         // For each seat, find available timeslots for today
-//         const seatsWithAvailability = await Promise.all(seats.map(async (seat) => {
-//           const availableSlots = await TimeSlot.aggregate([
-//             {
-//               $match: {
-//                 isActive: true,
-//                 _id: {
-//                   $nin: await Booking.find({
-//                     seat: seat._id,
-//                     bookingDate: today,
-//                     status: { $ne: 'cancelled' }
-//                   }).distinct('timeSlot')
-//                 }
-//               }
-//             },
-//             { $sort: { startTime: 1 } }
-//           ]);
-
-//           return {
-//             ...seat.toObject(),
-//             availableSlots
-//           };
-//         }));
-
-//         enrichedLibraries.push({
-//           ...library._doc,
-//           distanceInKm: Number(distance.toFixed(2)),
-//           seats: seatsWithAvailability
-//         });
-
-//       } catch (err) {
-//         console.warn(`Skipping library [${library.libraryName}] due to error:`, err.message);
-//       }
-//     }
-
-//     // Sort by distance
-//     enrichedLibraries.sort((a, b) => a.distanceInKm - b.distanceInKm);
-
-//     res.status(200).json({
-//       success: true,
-//       data: enrichedLibraries
-//     });
-
-//   } catch (error) {
-//     console.error('❌ Error in nearest libraries:', error.message);
-//     res.status(500).json({ 
-//       success: false,
-//       message: 'Failed to fetch nearby libraries',
-//       error: error.message
-//     });
-//   }
-// };
-
-
 export const getLibrariesByAddress = async (req, res) => {
   try {
     const { address } = req.query;
@@ -877,12 +604,9 @@ export const getLibrariesByAddress = async (req, res) => {
       });
     }
 
-    const today = new Date().toISOString().split('T')[0];
-
-    // Find matching libraries
     const libraries = await Library.find({
       location: { $regex: address, $options: 'i' },
-      status:"approved",
+      status: "approved",
       isBlocked: false
     })
     .populate('libraryType')
@@ -898,29 +622,16 @@ export const getLibrariesByAddress = async (req, res) => {
 
     const libraryIds = libraries.map(lib => lib._id);
 
-    // Get all seats for these libraries
     const allSeats = await Seat.find({ 
       library: { $in: libraryIds },
       isActive: true 
     }).lean();
 
-    // Get all time slots for these libraries
     const allTimeSlots = await TimeSlot.find({
       library: { $in: libraryIds },
       isActive: true
     }).populate('seats').lean();
 
-    // Get all bookings for today
-    const todayBookings = await Booking.find({
-      seat: { $in: allSeats.map(s => s._id) },
-      bookingDate: today,
-      status: { $ne: 'cancelled' }
-    }).lean();
-
-    // Create a set of booked time slots
-    const bookedSlotIds = new Set(todayBookings.map(b => b.timeSlot.toString()));
-
-    // Build response
     const response = libraries.map(library => {
       const librarySeats = allSeats.filter(seat => seat.library.toString() === library._id.toString());
       
@@ -928,12 +639,10 @@ export const getLibrariesByAddress = async (req, res) => {
         ...library,
         distanceInKm: 0,
         seats: librarySeats.map(seat => {
-          // Find all time slots that include this seat
           const availableSlots = allTimeSlots
             .filter(slot => 
               slot.library.toString() === library._id.toString() &&
-              slot.seats.some(s => s._id.toString() === seat._id.toString()) &&
-              !bookedSlotIds.has(slot._id.toString())
+              slot.seats.some(s => s._id.toString() === seat._id.toString())
             )
             .sort((a, b) => a.startTime.localeCompare(b.startTime))
             .map(slot => ({
@@ -978,11 +687,12 @@ export const getNearestLibrariesByPinCode = async (req, res) => {
   }
 
   try {
-    const today = new Date().toISOString().split('T')[0];
-    
-    const libraries = await Library.find({ status:"approved", isBlocked: false })
-      .populate('libraryType')
-      .populate('services');
+    const libraries = await Library.find({ 
+      status: "approved", 
+      isBlocked: false 
+    })
+    .populate('libraryType')
+    .populate('services');
 
     const enrichedLibraries = [];
 
@@ -992,34 +702,19 @@ export const getNearestLibrariesByPinCode = async (req, res) => {
       try {
         const distance = await findDistanceBetweenPins(userPinCode, library.pinCode);
         
-        // Get all active seats for this library
         const seats = await Seat.find({ 
           library: library._id,
           isActive: true 
         });
 
-        // Get all time slots for this library with populated seats
         const timeSlots = await TimeSlot.find({
           library: library._id,
           isActive: true
         }).populate('seats');
 
-        // Get all bookings for today for these seats
-        const todayBookings = await Booking.find({
-          seat: { $in: seats.map(s => s._id) },
-          bookingDate: today,
-          status: { $ne: 'cancelled' }
-        });
-
-        const bookedSlotIds = new Set(todayBookings.map(b => b.timeSlot.toString()));
-
-        // For each seat, find available timeslots
-        const seatsWithAvailability = seats.map(seat => {
+        const seatsWithSlots = seats.map(seat => {
           const availableSlots = timeSlots
-            .filter(slot => 
-              slot.seats.some(s => s._id.toString() === seat._id.toString()) &&
-              !bookedSlotIds.has(slot._id.toString())
-            )
+            .filter(slot => slot.seats.some(s => s._id.toString() === seat._id.toString()))
             .sort((a, b) => a.startTime.localeCompare(b.startTime))
             .map(slot => ({
               _id: slot._id,
@@ -1037,7 +732,7 @@ export const getNearestLibrariesByPinCode = async (req, res) => {
         enrichedLibraries.push({
           ...library._doc,
           distanceInKm: distance,
-          seats: seatsWithAvailability
+          seats: seatsWithSlots
         });
 
       } catch (err) {
@@ -1045,7 +740,6 @@ export const getNearestLibrariesByPinCode = async (req, res) => {
       }
     }
 
-    // Sort by distance
     enrichedLibraries.sort((a, b) => a.distanceInKm - b.distanceInKm);
 
     res.status(200).json({
@@ -1054,7 +748,7 @@ export const getNearestLibrariesByPinCode = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Error in nearest libraries:', error.message);
+    console.error('Error in nearest libraries:', error.message);
     res.status(500).json({ 
       success: false,
       message: 'Failed to fetch nearby libraries',
@@ -1079,8 +773,6 @@ export const getNearestLibrariesByLatLon = async (req, res) => {
   }
 
   try {
-    const today = new Date().toISOString().split('T')[0];
-    
     // First get all approved, unblocked libraries
     const libraries = await Library.find({ 
       status: "approved", 
@@ -1133,27 +825,17 @@ export const getNearestLibrariesByLatLon = async (req, res) => {
           isActive: true 
         });
 
-        // Get all time slots for this library with populated seats
+        // Get all active time slots for this library
         const timeSlots = await TimeSlot.find({
           library: library._id,
           isActive: true
         }).populate('seats');
 
-        // Get all bookings for today for these seats
-        const todayBookings = await Booking.find({
-          seat: { $in: seats.map(s => s._id) },
-          bookingDate: today,
-          status: { $ne: 'cancelled' }
-        });
-
-        const bookedSlotIds = new Set(todayBookings.map(b => b.timeSlot.toString()));
-        console.log("bookedSlotIds",bookedSlotIds)
-        // For each seat, find available timeslots
-        const seatsWithAvailability = seats.map(seat => {
+        // For each seat, find all assigned timeslots
+        const seatsWithSlots = seats.map(seat => {
           const availableSlots = timeSlots
             .filter(slot => 
-              slot.seats.some(s => s._id.toString() === seat._id.toString()) &&
-              !bookedSlotIds.has(slot._id.toString())
+              slot.seats.some(s => s._id.toString() === seat._id.toString())
             )
             .sort((a, b) => a.startTime.localeCompare(b.startTime))
             .map(slot => ({
@@ -1172,7 +854,7 @@ export const getNearestLibrariesByLatLon = async (req, res) => {
         enrichedLibraries.push({
           ...library._doc,
           distanceInKm: Number(distance.toFixed(2)),
-          seats: seatsWithAvailability
+          seats: seatsWithSlots
         });
 
       } catch (err) {
@@ -1197,3 +879,5 @@ export const getNearestLibrariesByLatLon = async (req, res) => {
     });
   }
 };
+
+

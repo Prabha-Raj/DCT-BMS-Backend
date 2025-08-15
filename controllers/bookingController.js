@@ -303,12 +303,10 @@ export const createBooking = async (req, res) => {
 export const getUserBookings = async (req, res) => {
   try {
     const userId = req.user._id;
-    const { status, page = 1, limit = 10 } = req.query;
+    const { status,  } = req.query;
 
     const filter = { user: userId };
     if (status) filter.status = status;
-
-    const total = await Booking.countDocuments(filter);
 
     const bookings = await Booking.find(filter)
       .populate('seat')
@@ -316,15 +314,10 @@ export const getUserBookings = async (req, res) => {
       .populate('library')
       .populate('paymentId')
       .sort({ bookingDate: -1 })
-      .skip((page - 1) * limit)
-      .limit(limit);
 
     res.status(200).json({
       success: true,
       count: bookings.length,
-      total,
-      page: parseInt(page),
-      pages: Math.ceil(total / limit),
       data: bookings
     });
   } catch (error) {
