@@ -12,16 +12,16 @@ export const protect = async (req, res, next) => {
     ) {
       token = req.headers.authorization.split(" ")[1];
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
+      // console.log(decoded)
       const user = await User.findById(decoded.id).select("-password");
 
       if (!user) {
         return res.status(401).json({ message: "User not found || Invalid token" });
       }
       // console.log(user.tokenVersion, decoded.tokenVersion)
-      if (user.tokenVersion !== decoded.tokenVersion) {
-        return res.status(401).json({ message: "Token expired or invalid" });
-      }
+      // if (user.tokenVersion !== decoded.tokenVersion) {
+      //   return res.status(401).json({ message: "Token expired or invalid" });
+      // }
 
       req.user = user;
       // console.log("protect user++++++++++++++++++++++++", user.role, user._id)

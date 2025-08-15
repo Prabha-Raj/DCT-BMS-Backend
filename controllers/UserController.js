@@ -106,14 +106,15 @@ export const loginUser = async (req, res) => {
     }
 
     // Token generation - FIRST save the user, THEN generate token
-    user.tokenVersion += 1;
+    // user.tokenVersion += 1;
     await user.save(); // Save the incremented version first
 
     const token = jwt.sign(
       { 
         id: user._id, 
         role: user.role, 
-        tokenVersion: user.tokenVersion // Use the updated version
+        // tokenVersion: user.tokenVersion 
+        // Use the updated version
       },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
