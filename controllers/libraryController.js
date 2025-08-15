@@ -128,31 +128,171 @@ export const createLibrary = async (req, res) => {
 };
 
 // READ ALL for admin without pagination and filtering
+// export const getAllLibrariesForAdmin = async (req, res) => {
+//   try {
+//     const libraries = await Library.find()
+//       .populate("librarian")
+//       .populate("libraryType")
+//       .populate("services")
+//       .sort({ createdAt: -1 });
+
+//     const total = await Library.countDocuments();
+//     const totalSeats = await Seat.countDocuments()
+//     console.log(totalSeats);
+//     res.status(200).json({
+//       libraries,
+//       total,
+//       success: true
+//     });
+//   } catch (error) {
+//     res.status(500).json({ 
+//       message: "Failed to fetch libraries", 
+//       error: error.message,
+//       success: false
+//     });
+//   }
+// };
+
+// export const getAllLibrariesForAdmin = async (req, res) => {
+//   try {
+//     // First get all libraries with populated data
+//     const libraries = await Library.find()
+//       .populate("librarian")
+//       .populate("libraryType")
+//       .populate("services")
+//       .sort({ createdAt: -1 })
+//       .lean(); // Convert to plain JavaScript objects
+
+//     const total = libraries.length;
+
+//     if (total > 0) {
+//       // Get seat counts for all libraries in one efficient query
+//       const seatCounts = await Seat.aggregate([
+//         { $match: { isActive: true } }, // Only count active seats
+//         {
+//           $group: {
+//             _id: "$library",
+//             totalSeats: { $sum: 1 }
+//           }
+//         }
+//       ]);
+
+//       // Create a map for quick lookup of seat counts
+//       const seatCountMap = seatCounts.reduce((map, item) => {
+//         map[item._id.toString()] = item.totalSeats;
+//         return map;
+//       }, {});
+
+//       // Add seat count to each library while preserving all existing fields
+//       const librariesWithSeats = libraries.map(library => {
+//         // Create a new object with all original properties
+//         const libraryWithSeats = { ...library };
+//         // Add the seat count (default to 0 if no seats found)
+//         libraryWithSeats.totalSeats = seatCountMap[library._id.toString()] || 0;
+//         return libraryWithSeats;
+//       });
+
+//       return res.status(200).json({
+//         libraries: librariesWithSeats,
+//         total,
+//         success: true
+//       });
+//     }
+
+//     // If no libraries found
+//     res.status(200).json({
+//       libraries: [],
+//       total: 0,
+//       success: true
+//     });
+
+//   } catch (error) {
+//     console.error('Admin Library Fetch Error:', error);
+//     res.status(500).json({ 
+//       message: "Failed to fetch libraries", 
+//       error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+//       success: false
+//     });
+//   }
+// };
+
 export const getAllLibrariesForAdmin = async (req, res) => {
   try {
-    const libraries = await Library.find({})
+    // First get all libraries with populated data
+    const libraries = await Library.find()
       .populate("librarian")
       .populate("libraryType")
       .populate("services")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean(); // Convert to plain JavaScript objects
 
-    const total = await Library.countDocuments();
+    const total = libraries.length;
 
+    if (total > 0) {
+      // Get seat counts for all libraries in one query
+      const seatCounts = await Seat.aggregate([
+        { $match: { isActive: true } }, // Only count active seats
+        {
+          $group: {
+            _id: "$library",
+            totalSeats: { $sum: 1 }
+          }
+        }
+      ]);
+
+      // Get booking counts for all libraries in one query
+      const bookingCounts = await Booking.aggregate([
+        {
+          $group: {
+            _id: "$library",
+            totalBookings: { $sum: 1 }
+          }
+        }
+      ]);
+
+      // Create maps for quick lookup
+      const seatCountMap = seatCounts.reduce((map, item) => {
+        map[item._id.toString()] = item.totalSeats;
+        return map;
+      }, {});
+
+      const bookingCountMap = bookingCounts.reduce((map, item) => {
+        map[item._id.toString()] = item.totalBookings;
+        return map;
+      }, {});
+
+      // Add counts to each library while preserving all existing fields
+      const librariesWithCounts = libraries.map(library => {
+        return {
+          ...library,
+          totalSeats: seatCountMap[library._id.toString()] || 0,
+          totalBookings: bookingCountMap[library._id.toString()] || 0
+        };
+      });
+
+      return res.status(200).json({
+        libraries: librariesWithCounts,
+        total,
+        success: true
+      });
+    }
+
+    // If no libraries found
     res.status(200).json({
-      libraries,
-      total,
+      libraries: [],
+      total: 0,
       success: true
     });
+
   } catch (error) {
+    console.error('Admin Library Fetch Error:', error);
     res.status(500).json({ 
       message: "Failed to fetch libraries", 
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
       success: false
     });
   }
 };
-
-
 
 // get all libraries for students with filtering
 export const getAllLibrariesForStudents = async (req, res) => {
