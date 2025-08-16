@@ -188,7 +188,7 @@ export const createBooking = async (req, res) => {
       const transaction = await processPayment(
         userId,
         totalAmount,
-        `Booking for ${days} day(s) at ${seatDoc.library}`,
+        `Booking for ${days} day(s) at this ${seatDoc.library} (Library)`,
         [], // Will update after creating bookings
         session
       );

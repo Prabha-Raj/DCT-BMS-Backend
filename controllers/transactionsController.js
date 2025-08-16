@@ -1,69 +1,7 @@
 import Library from "../model/LibraryModel.js";
 import Transaction from "../model/Transaction.js";
 
-// Admin: Get all transactions with filters
-// export const getAllTransactionsAdmin = async (req, res) => {
-//   try {
-//     const {
-//       user,
-//       library,
-//       type,
-//       status,
-//       startDate,
-//       endDate,
-//       page = 1,
-//       limit = 20
-//     } = req.query;
 
-//     const filter = {};
-//     if (user) filter.user = user;
-//     if (library) filter.library = library;
-//     if (type) filter.type = type;
-//     if (status) filter.status = status;
-
-//     if (startDate || endDate) {
-//       filter.createdAt = {};
-//       if (startDate) filter.createdAt.$gte = new Date(startDate);
-//       if (endDate) {
-//         const end = new Date(endDate);
-//         end.setHours(23, 59, 59, 999);
-//         filter.createdAt.$lte = end;
-//       }
-//     }
-
-//     const skip = (page - 1) * limit;
-//     const total = await Transaction.countDocuments(filter);
-
-//     const transactions = await Transaction.find(filter)
-//       .populate('user', 'name email mobile role')
-//       .populate('wallet', 'balance')
-//       .populate('library', 'libraryName email')
-//       .populate({
-//         path: 'bookings',
-//         populate: [
-//           { path: 'seat', select: 'seatName seatNumber' },
-//           { path: 'timeSlot', select: 'startTime endTime price' },
-//           { path: 'library', select: 'libraryName' }
-//         ]
-//       })
-//       .sort({ createdAt: -1 })
-//       .skip(skip)
-//       .limit(parseInt(limit));
-
-//     res.status(200).json({
-//       success: true,
-//       count: transactions.length,
-//       total,
-//       page: parseInt(page),
-//       pages: Math.ceil(total / limit),
-//       data: transactions
-//     });
-//   } catch (error) {
-//     res.status(500).json({ success: false, message: error.message });
-//   }
-// };
-
-// Admin: Get all transactions with filters and statistics
 export const getAllTransactionsAdmin = async (req, res) => {
   try {
     const {
