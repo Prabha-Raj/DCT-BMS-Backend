@@ -5,6 +5,7 @@ import Booking from "../model/Booking.js";
 import Attendance from "../model/Attendance.js";
 import Inquiry from "../model/InquiryModel.js";
 import Transaction from "../model/Transaction.js";
+import Wallet from "../model/Wallet.js";
 
 // Admin Dashboard Stats
 // export const adminStats = async (req, res) => {
@@ -907,7 +908,7 @@ export const studentStats = async (req, res) => {
       recentAttendances,
       bookingStats,
       attendanceStats,
-      walletBalance
+      wallet
     ] = await Promise.all([
       Booking.countDocuments({ user: studentId }),
       Attendance.countDocuments({ student: studentId }),
@@ -950,25 +951,7 @@ export const studentStats = async (req, res) => {
           }
         }
       ]),
-      Transaction.aggregate([
-        {
-          $match: { user: new mongoose.Types.ObjectId(studentId) }
-        },
-        {
-          $group: {
-            _id: null,
-            balance: {
-              $sum: {
-                $cond: [
-                  { $eq: ["$type", "credit"] },
-                  "$amount",
-                  { $multiply: ["$amount", -1] }
-                ]
-              }
-            }
-          }
-        }
-      ])
+      Wallet.findOne({ user: studentId }).select('balance') // Directly get wallet balance
     ]);
 
     // Format booking stats
@@ -983,9 +966,6 @@ export const studentStats = async (req, res) => {
       avgDuration: 0,
       librariesVisited: []
     };
-
-    // Format wallet balance
-    const balance = walletBalance.length > 0 ? walletBalance[0].balance : 0;
 
     // Calculate today's attendance
     const todayStart = new Date();
@@ -1014,9 +994,9 @@ export const studentStats = async (req, res) => {
         bookingStatus: formattedBookingStats,
         attendance: {
           total: attendance.total,
-          avgDuration: attendance.avgDuration || 0
+          avgDuration: Math.round(attendance.avgDuration || 0) // Round to whole number
         },
-        walletBalance: balance,
+        walletBalance: wallet ? wallet.balance : 0,
         upcomingBookings,
         recentAttendances,
         currentAttendance: todayAttendance
