@@ -898,6 +898,129 @@ export const getNearestLibrariesByPinCode = async (req, res) => {
 };
 
 
+// export const getNearestLibrariesByLatLon = async (req, res) => {
+//   let { userLat, userLon } = req.body;
+
+//   userLat = parseFloat(userLat);
+//   userLon = parseFloat(userLon);
+//   const MAX_DISTANCE_KM = 20; // 20km radius
+
+//   if (!userLat || !userLon) {
+//     return res.status(400).json({ 
+//       success: false,
+//       message: 'User latitude and longitude are required' 
+//     });
+//   }
+
+//   try {
+//     // First get all approved, unblocked libraries
+//     const libraries = await Library.find({ 
+//       status: "approved", 
+//       isBlocked: false 
+//     })
+//     .populate('libraryType')
+//     .populate('services');
+
+//     const enrichedLibraries = [];
+
+//     for (const library of libraries) {
+//       try {
+//         let libLat, libLon;
+        
+//         // Check if coordinates exist in the library document
+//         if (library.coordinates && library.coordinates.lat && library.coordinates.lng) {
+//           libLat = parseFloat(library.coordinates.lat);
+//           libLon = parseFloat(library.coordinates.lng);
+//         } 
+//         // Fallback to geocoding the address if coordinates don't exist
+//         else if (library.location) {
+//           const libLocation = await getLatLngFromAddress(library.location);
+//           if (!libLocation || !libLocation.lat || !libLocation.lon) {
+//             console.warn(`No coordinates for library: ${library.libraryName}`);
+//             continue;
+//           }
+//           libLat = libLocation.lat;
+//           libLon = libLocation.lon;
+//         } 
+//         // Skip if no coordinates or address
+//         else {
+//           console.warn(`No coordinates or address for library: ${library.libraryName}`);
+//           continue;
+//         }
+
+//         // Calculate distance
+//         const distance = await findDistanceBetweenLatAndLon(
+//           userLat, userLon, 
+//           libLat, libLon
+//         );
+
+//         // Skip libraries beyond 20km radius
+//         if (distance > MAX_DISTANCE_KM) {
+//           continue;
+//         }
+
+//         // Get all active seats for this library
+//         const seats = await Seat.find({ 
+//           library: library._id,
+//           isActive: true 
+//         });
+
+//         // Get all active time slots for this library
+//         const timeSlots = await TimeSlot.find({
+//           library: library._id,
+//           isActive: true
+//         }).populate('seats');
+
+//         // For each seat, find all assigned timeslots
+//         const seatsWithSlots = seats.map(seat => {
+//           const availableSlots = timeSlots
+//             .filter(slot => 
+//               slot.seats.some(s => s._id.toString() === seat._id.toString())
+//             )
+//             .sort((a, b) => a.startTime.localeCompare(b.startTime))
+//             .map(slot => ({
+//               _id: slot._id,
+//               startTime: slot.startTime,
+//               endTime: slot.endTime,
+//               price: slot.price
+//             }));
+
+//           return {
+//             ...seat.toObject(),
+//             availableSlots
+//           };
+//         });
+
+//         enrichedLibraries.push({
+//           ...library._doc,
+//           distanceInKm: Number(distance.toFixed(2)),
+//           seats: seatsWithSlots
+//         });
+
+//       } catch (err) {
+//         console.warn(`Skipping library [${library.libraryName}] due to error:`, err.message);
+//       }
+//     }
+
+//     // Sort by distance (nearest first)
+//     enrichedLibraries.sort((a, b) => a.distanceInKm - b.distanceInKm);
+
+//     res.status(200).json({
+//       success: true,
+//       data: enrichedLibraries
+//     });
+
+//   } catch (error) {
+//     console.error('❌ Error in nearest libraries:', error.message);
+//     res.status(500).json({ 
+//       success: false,
+//       message: 'Failed to fetch nearby libraries',
+//       error: error.message
+//     });
+//   }
+// };
+
+
 export const getNearestLibrariesByLatLon = async (req, res) => {
   let { userLat, userLon } = req.body;
 
@@ -927,24 +1050,48 @@ export const getNearestLibrariesByLatLon = async (req, res) => {
       try {
         let libLat, libLon;
         
-        // Check if coordinates exist in the library document
-        if (library.coordinates && library.coordinates.lat && library.coordinates.lng) {
-          libLat = parseFloat(library.coordinates.lat);
-          libLon = parseFloat(library.coordinates.lng);
-        } 
-        // Fallback to geocoding the address if coordinates don't exist
-        else if (library.location) {
-          const libLocation = await getLatLngFromAddress(library.location);
-          if (!libLocation || !libLocation.lat || !libLocation.lon) {
-            console.warn(`No coordinates for library: ${library.libraryName}`);
-            continue;
+        // 1. First try to parse coordinates from the coordinates field
+        if (library.coordinates) {
+          try {
+            // Handle both stringified JSON and proper object
+            const coords = typeof library.coordinates === 'string' 
+              ? JSON.parse(library.coordinates)
+              : library.coordinates;
+            
+            if (coords.lat && coords.lng) {
+              libLat = parseFloat(coords.lat);
+              libLon = parseFloat(coords.lng);
+            }
+          } catch (parseError) {
+            console.warn(`Error parsing coordinates for library ${library.libraryName}:`, parseError.message);
           }
-          libLat = libLocation.lat;
-          libLon = libLocation.lon;
-        } 
-        // Skip if no coordinates or address
-        else {
-          console.warn(`No coordinates or address for library: ${library.libraryName}`);
+        }
+        
+        // 2. If still no coordinates, try geocoding
+        if ((!libLat || !libLon) && library.location) {
+          try {
+            const libLocation = await getLatLngFromAddress(library.location);
+            if (libLocation && libLocation.lat && libLocation.lon) {
+              libLat = libLocation.lat;
+              libLon = libLocation.lon;
+              
+              // Update library with coordinates for future use
+              await Library.findByIdAndUpdate(library._id, {
+                coordinates: JSON.stringify({
+                  lat: libLat,
+                  lng: libLon
+                })
+              });
+            }
+          } catch (geocodeError) {
+            console.warn(`Geocoding failed for ${library.libraryName}:`, geocodeError.message);
+            continue; // Skip this library if we can't get coordinates
+          }
+        }
+        
+        // Skip if still no coordinates
+        if (!libLat || !libLon) {
+          console.warn(`No coordinates for library: ${library.libraryName}`);
           continue;
         }
 
@@ -1019,5 +1166,3 @@ export const getNearestLibrariesByLatLon = async (req, res) => {
     });
   }
 };
-
-
