@@ -18,6 +18,20 @@ const UserSchema = new mongoose.Schema(
       required: [true, "Mobile is required"],
       unique: true,
     },
+    gender:{
+      type:String,
+      enum:["male","female", "other"]
+    },
+    age:{
+      type:String
+    },
+    profileImage:String,
+    city:{
+      type:String,
+    },
+    preparingFor:{
+      type:String
+    },
     password: {
       type: String,
       required: [true, "Password is required"],
@@ -32,11 +46,7 @@ const UserSchema = new mongoose.Schema(
       type:Boolean,
       default:false
     },
-  tokenVersion: {
-    type: Number,
-    required:true,
-    default: 0 // हर user का start version 0 रहेगा
-  }
+  
   },
   { timestamps: true }
 );

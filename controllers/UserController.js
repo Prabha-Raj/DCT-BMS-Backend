@@ -6,7 +6,7 @@ import User from "../model/User.js";
 
 export const createUser = async (req, res) => {
   try {
-    const { name, email, mobile, password, role } = req.body;
+    const { name, email, mobile, password, role, gender} = req.body;
 
     // Check if user already exists
     const existingUser = await User.findOne({ email });
@@ -30,6 +30,7 @@ export const createUser = async (req, res) => {
       role: role || "student" // Default to student if role not provided
     });
 
+    if(gender) newUser.gender = gender;
     const savedUser = await newUser.save();
 
     // Create wallet only if user is a student
@@ -436,11 +437,39 @@ export const getUserById = async (req, res) => {
   }
 };
 
-// Update user by ID
+export const getUserProfile = async (req, res) => {
+  try {
+    const id = req.user._id;
+    console.log(id)
+
+    const user = await User.findById(id).select("-password");
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "User retrieved successfully",
+      data: user,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Error retrieving user",
+      error: error.message,
+    });
+  }
+};
+
+// Update user user profile
 export const updateUser = async (req, res) => {
   try {
-    const { id } = req.params;
-    const { name, email, password } = req.body;
+    const id = req.user._id;
+    const { name, email, mobile, gender, age, city, preparingFor } = req.body;
 
     // Check if user exists
     const user = await User.findById(id);
@@ -466,13 +495,31 @@ export const updateUser = async (req, res) => {
     const updateData = {};
     if (name) updateData.name = name;
     if (email) updateData.email = email;
+    if (mobile) updateData.mobile = mobile;
+    if (gender) updateData.gender = gender;
+    if (age) updateData.age = age;
+    if (city) updateData.city = city;
+    if (preparingFor) updateData.preparingFor = preparingFor;
 
-    // Hash password if provided
-    if (password) {
-      const saltRounds = 10;
-      updateData.password = await bcrypt.hash(password, saltRounds);
+    if(!req.file){
+      return res.status(404).join({
+        message:"profile image not found"
+      })
     }
-
+       // Handle profile image upload
+    if (req.file) {
+      // Delete old profile image if it exists
+      if (user.profileImage) {
+        const oldImagePath = path.join(__dirname, '..', 'public', 'uploads', user.profileImage);
+        if (fs.existsSync(oldImagePath)) {
+          fs.unlinkSync(oldImagePath);
+        }
+      }
+      
+      // Save new profile image path
+      updateData.profileImage = req.file.filename;
+    }
+    
     const updatedUser = await User.findByIdAndUpdate(
       id,
       updateData,
@@ -481,13 +528,13 @@ export const updateUser = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: "User updated successfully",
+      message: "Profile updated successfully",
       data: updatedUser,
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: "Error updating user",
+      message: "Error updating profile",
       error: error.message,
     });
   }
