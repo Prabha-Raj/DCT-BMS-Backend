@@ -20,6 +20,10 @@ import transactionRoutes from "./routes/transactionRoutes.js";
 import attendanceRoutes from "./routes/attendanceRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 import settingRoutes from "./routes/settingRoutes.js";
+import monthlyBookingRoutes from "./routes/monthlyBookingRouter.js";
+
+
+
 
 const app = express();
 dotenv.config();
@@ -51,6 +55,9 @@ app.use("/api/transaction", transactionRoutes);
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api/stats", dashboardRoutes);
 app.use("/api/setting", settingRoutes);
+app.use("/api/monthly-booking", monthlyBookingRoutes)
+
+
 
 app.get("/", (req, res) => {
   res.send("Backend of BookMySpace is running now...");

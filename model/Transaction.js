@@ -31,6 +31,11 @@ const TransactionSchema = new mongoose.Schema(
         ref: "Booking"
       }
     ],
+    monthlyBooking:
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "MonthlyBooking"
+      },
     library: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Library"

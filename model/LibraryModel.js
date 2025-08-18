@@ -47,7 +47,15 @@ const librarySchema = new mongoose.Schema({
    qrCode: {
     type: String,
     default: null
-  }
+  },
+  hourlyFee:{
+    type:Number,
+    default:0
+  },
+  monthlyFee:{
+    type:Number,
+    default:0
+  },
 }, {
   timestamps: true
 });
