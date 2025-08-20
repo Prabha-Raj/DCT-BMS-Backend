@@ -501,11 +501,12 @@ export const updateUser = async (req, res) => {
     if (city) updateData.city = city;
     if (preparingFor) updateData.preparingFor = preparingFor;
 
-    if(!req.file){
-      return res.status(404).join({
-        message:"profile image not found"
-      })
-    }
+    // if(!req?.file){
+    //   return res.status(404).json({
+    //     success:false,
+    //     message:"Profile image not found"
+    //   })
+    // }
        // Handle profile image upload
     if (req.file) {
       // Delete old profile image if it exists
