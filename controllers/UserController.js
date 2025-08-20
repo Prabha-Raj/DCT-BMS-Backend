@@ -508,24 +508,8 @@ export const updateUser = async (req, res) => {
     if (city) updateData.city = city;
     if (preparingFor) updateData.preparingFor = preparingFor;
 
-    // if(!req?.file){
-    //   return res.status(404).json({
-    //     success:false,
-    //     message:"Profile image not found"
-    //   })
-    // }
-       // Handle profile image upload
-    if (req.file) {
-      // Delete old profile image if it exists
-      if (user.profileImage) {
-        // const oldImagePath = path.join(__dirname, '..', 'public', 'uploads', user.profileImage);
-        const oldImagePath = path.join(__dirname, 'uploads', user.profileImage);
 
-        if (fs.existsSync(oldImagePath)) {
-          fs.unlinkSync(oldImagePath);
-        }
-      }
-      
+    if (req.file) {
       // Save new profile image path
       updateData.profileImage = req.file.filename;
     }
@@ -535,6 +519,19 @@ export const updateUser = async (req, res) => {
       updateData,
       { new: true, runValidators: true }
     ).select("-password");
+
+    if (req.file && updatedUser) {
+      
+      // Delete old profile image if it exists
+      if (user.profileImage) {
+        // const oldImagePath = path.join(__dirname, '..', 'public', 'uploads', user.profileImage);
+        const oldImagePath = path.join(__dirname, 'uploads', user.profileImage);
+
+        if (fs.existsSync(oldImagePath)) {
+          fs.unlinkSync(oldImagePath);
+        }
+      }
+    }
 
     res.status(200).json({
       success: true,
