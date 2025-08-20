@@ -4,6 +4,13 @@ import jwt from "jsonwebtoken";
 import Wallet from "../model/Wallet.js";
 import User from "../model/User.js";
 
+import { fileURLToPath } from "url";
+import path from "path";
+import fs from "fs";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+
 export const createUser = async (req, res) => {
   try {
     const { name, email, mobile, password, role, gender} = req.body;
@@ -511,7 +518,9 @@ export const updateUser = async (req, res) => {
     if (req.file) {
       // Delete old profile image if it exists
       if (user.profileImage) {
-        const oldImagePath = path.join(__dirname, '..', 'public', 'uploads', user.profileImage);
+        // const oldImagePath = path.join(__dirname, '..', 'public', 'uploads', user.profileImage);
+        const oldImagePath = path.join(__dirname, 'uploads', user.profileImage);
+
         if (fs.existsSync(oldImagePath)) {
           fs.unlinkSync(oldImagePath);
         }
@@ -535,7 +544,7 @@ export const updateUser = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: "Error updating profile",
+      message: "Error updating profile.",
       error: error.message,
     });
   }
