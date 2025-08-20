@@ -25,7 +25,7 @@ const allowedTypes = /jpeg|jpg|png|webp/; // allowed formate
   if (extname && mimetype) {
     cb(null, true);
   } else {
-    cb(new Error("Images only (jpg, jpeg, png)!"));
+    cb(new Error("Images only (jpg, jpeg, png, webp)!"));
   }
 };
 
