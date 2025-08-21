@@ -47,7 +47,7 @@ const processPayment = async (userId, amount, description, bookingIds, session) 
 const processRefund = async (userId, amount, description, bookingIds, session = null) => {
   const options = session ? { session } : {};
   const localSession = session ? null : await mongoose.startSession();
-
+  // console.log(userId, amount, description, bookingIds, session)
   if (localSession) {
     localSession.startTransaction();
   }
@@ -331,7 +331,7 @@ export const getUserBookings = async (req, res) => {
 // Get bookings for a library (admin/librarian access)
 export const getLibraryBookings = async (req, res) => {
   try {
-    const { date, status, page = 1, limit = 10 } = req.query;
+    const { date, status } = req.query;
 
     // Get the library assigned to the logged-in user
     const myLibrary = await Library.findOne({ librarian: req.user?._id }).select("_id");
@@ -365,15 +365,13 @@ export const getLibraryBookings = async (req, res) => {
       .populate('timeSlot')
       .populate('paymentId')
       .sort({ bookingDate: 1 })
-      .skip((page - 1) * limit)
-      .limit(limit);
+    
+      // console.log(bookings)
 
     res.status(200).json({
       success: true,
       count: bookings.length,
       total,
-      page: parseInt(page),
-      pages: Math.ceil(total / limit),
       data: bookings
     });
   } catch (error) {
@@ -471,13 +469,14 @@ export const updateBookingStatus = async (req, res) => {
         message: "Cannot reject a booking that's not pending or confirmed" 
       });
     }
-
+    // console.log(booking)
     // Process refund if rejecting a pending or confirmed booking
     if (status === 'rejected' && booking.paymentStatus === 'paid') {
+      // console.log("jjj")
       await processRefund(
         booking.user._id,
-        booking.totalAmount,
-        `Refund for rejected booking on ${booking.bookingDate.toDateString()}`,
+        booking.amount,
+        `Refund for rejected booking on ${booking.bookingDate}`,
         [booking._id],
         session
       );

@@ -1,6 +1,7 @@
 import express from 'express';
 import { 
   getAllMonthlyAttendances, 
+  getAllMonthlyBookingAttendancesForLibrary, 
   getDailyAttendance, 
   getMyMonthlyAttendances, 
   monthlyCheckIn, 
@@ -23,7 +24,7 @@ router.get('/admin/attendances', protect, adminOnly, getAllMonthlyAttendances);
 router.get('/admin/students/:studentId/attendances', protect, adminOnly, getAllMonthlyAttendances);
 
 // Librarian endpoints
-router.get('/librarian/:libraryId/attendances', protect, librarianOnly, getAllMonthlyAttendances);
+router.get('/library', protect, librarianOnly, getAllMonthlyBookingAttendancesForLibrary);
 router.get('/librarian/:libraryId/students/:studentId/attendances', protect, librarianOnly, getAllMonthlyAttendances);
 
 export default router;
