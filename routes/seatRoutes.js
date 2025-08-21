@@ -9,7 +9,8 @@ import {
     getSeatsByLibrary,
     bulkCreateSeats,
     getSeatDetails,
-    addTimeSlotsForASeat
+    addTimeSlotsForASeat,
+    getMonthlySeatCompleteDetails
 } from '../controllers/SeatController.js';
 import { librarianOnly, protect } from '../middleware/authMiddleware.js';
 
@@ -24,7 +25,8 @@ router.post('/bulk', librarianOnly, bulkCreateSeats);
 router.get('/', getAllSeats);
 router.get('/:id', getSeatById);
 router.get('/:id/details', getSeatDetails);
-router.put('/:id', librarianOnly, updateSeat);
+router.get('/:id/mb/details/for-librarian', getMonthlySeatCompleteDetails);
+router.put('/update/:id', librarianOnly, updateSeat);
 router.post('/:id/time-slots', librarianOnly,addTimeSlotsForASeat);
 router.delete('/:id', librarianOnly, deleteSeat);
 router.patch('/:id/toggle-status', librarianOnly, toggleSeatStatus);

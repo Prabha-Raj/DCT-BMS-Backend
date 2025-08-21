@@ -7,6 +7,7 @@ import Transaction from "../model/Transaction.js";
 import Library from "../model/LibraryModel.js";
 import Setting from "../model/Settings.js";
 import User from "../model/User.js";
+import MonthlyBooking from "../model/MonthlyBooking.js";
 
 // Helper function to process payment
 const processPayment = async (userId, amount, description, bookingIds, session) => {
@@ -255,3 +256,152 @@ export const createBooking = async (req, res) => {
   }
 };
 
+
+// import mongoose from "mongoose";
+// import Booking from "../model/Booking.js";
+// import MonthlyBooking from "../model/MonthlyBooking.js";
+
+// ---------------- CONTROLLER ----------------
+export const getActiveBookingForCheckInCheckOut = async (req, res) => {
+  try {
+    const userId = req.user?._id;
+    const { libraryId } = req.params;
+
+    // ✅ Validate IDs
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid user ID"
+      });
+    }
+    if (libraryId && !mongoose.Types.ObjectId.isValid(libraryId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid library ID"
+      });
+    }
+
+    const libraryFilter = libraryId ? { library: libraryId } : {};
+    const now = new Date();
+
+    // ✅ Today range
+    const todayStart = new Date(now);
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(todayStart);
+    todayEnd.setDate(todayStart.getDate() + 1);
+
+    // ---------------- DAILY BOOKINGS ----------------
+    const dailyBookings = await Booking.find({
+      user: userId,
+      bookingDate: { $gte: todayStart, $lt: todayEnd },
+      status: "confirmed",
+      paymentStatus: "paid",
+      ...libraryFilter
+    })
+      .populate("seat", "seatNumber")
+      .populate("library", "name")
+      .populate("timeSlot", "startTime endTime")
+      .lean();
+
+    // ---------------- MONTHLY BOOKINGS ----------------
+    const monthlyBookings = await MonthlyBooking.find({
+      user: userId,
+      startDate: { $lte: now }, // booking started
+      endDate: { $gte: now },   // not expired yet
+      status: "confirmed",
+      paymentStatus: "paid",
+      ...libraryFilter
+    })
+      .populate("seat", "seatNumber")
+      .populate("library", "name")
+      .lean();
+
+    // ---------------- FORMAT DAILY BOOKINGS ----------------
+    const formattedDailyBookings = dailyBookings.map(booking => {
+      const isCurrentlyActive = checkIfDailyBookingIsCurrentlyActive(booking, now);
+      return {
+        _id: booking._id,
+        type: "daily",
+        seat: booking.seat,
+        library: booking.library,
+        timeSlot: booking.timeSlot,
+        bookingDate: booking.bookingDate,
+        status: booking.status,
+        paymentStatus: booking.paymentStatus,
+        isActive: true,              // today booking found
+        isCurrentlyActive,           // active in current slot
+        createdAt: booking.createdAt
+      };
+    });
+
+    // ---------------- FORMAT MONTHLY BOOKINGS ----------------
+    const formattedMonthlyBookings = monthlyBookings.map(booking => ({
+      _id: booking._id,
+      type: "monthly",
+      seat: booking.seat,
+      library: booking.library,
+      startDate: booking.startDate,
+      endDate: booking.endDate,
+      status: booking.status,
+      paymentStatus: booking.paymentStatus,
+      isActive: true,          // active this month
+      isCurrentlyActive: true, // monthly is always active
+      createdAt: booking.createdAt
+    }));
+
+    // ---------------- MERGE + SORT ----------------
+    const allActiveBookings = [...formattedDailyBookings, ...formattedMonthlyBookings]
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    return res.status(200).json({
+      success: true,
+      message: "Active bookings retrieved successfully",
+      data: {
+        currentTime: now,
+        bookings: allActiveBookings,
+        stats: {
+          total: allActiveBookings.length,
+          daily: formattedDailyBookings.length,
+          monthly: formattedMonthlyBookings.length,
+          currentlyActive: allActiveBookings.filter(b => b.isCurrentlyActive).length
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error("Get active bookings error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message
+    });
+  }
+};
+
+// ---------------- HELPER ----------------
+const checkIfDailyBookingIsCurrentlyActive = (booking, currentTime) => {
+  if (!booking.timeSlot || !booking.timeSlot.startTime || !booking.timeSlot.endTime) {
+    return false;
+  }
+
+  try {
+    const today = new Date(currentTime);
+    today.setHours(0, 0, 0, 0);
+
+    const [startHours, startMinutes] = booking.timeSlot.startTime.split(':').map(Number);
+    const [endHours, endMinutes] = booking.timeSlot.endTime.split(':').map(Number);
+
+    const startTime = new Date(today);
+    startTime.setHours(startHours, startMinutes, 0, 0);
+
+    const endTime = new Date(today);
+    endTime.setHours(endHours, endMinutes, 0, 0);
+
+    return currentTime >= startTime && currentTime <= endTime;
+  } catch (error) {
+    console.error("Error checking daily booking current activity:", error);
+    return false;
+  }
+};
+
+export default { getActiveBookingForCheckInCheckOut };

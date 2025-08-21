@@ -23,8 +23,8 @@ const librarySchema = new mongoose.Schema({
   location: String,
   pinCode:String,
   coordinates: {
-    lat: String,
-    lng: String
+    lat: Number,
+    lng: Number
   },
   contactNumber: String,
   email: { type: String, required: true },

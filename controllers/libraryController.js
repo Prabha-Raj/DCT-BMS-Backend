@@ -8,6 +8,7 @@ import { generateQRCode } from "../utils/qrCodeHelper.js";
 import Seat from "../model/Seat.js";
 import TimeSlot from "../model/TimeSlot.js";
 import Booking from "../model/Booking.js";
+import MonthlyBooking from "../model/MonthlyBooking.js";
 
 
 export const createLibrary = async (req, res) => {
@@ -127,94 +128,6 @@ export const createLibrary = async (req, res) => {
   }
 };
 
-// READ ALL for admin without pagination and filtering
-// export const getAllLibrariesForAdmin = async (req, res) => {
-//   try {
-//     const libraries = await Library.find()
-//       .populate("librarian")
-//       .populate("libraryType")
-//       .populate("services")
-//       .sort({ createdAt: -1 });
-
-//     const total = await Library.countDocuments();
-//     const totalSeats = await Seat.countDocuments()
-//     console.log(totalSeats);
-//     res.status(200).json({
-//       libraries,
-//       total,
-//       success: true
-//     });
-//   } catch (error) {
-//     res.status(500).json({ 
-//       message: "Failed to fetch libraries", 
-//       error: error.message,
-//       success: false
-//     });
-//   }
-// };
-
-// export const getAllLibrariesForAdmin = async (req, res) => {
-//   try {
-//     // First get all libraries with populated data
-//     const libraries = await Library.find()
-//       .populate("librarian")
-//       .populate("libraryType")
-//       .populate("services")
-//       .sort({ createdAt: -1 })
-//       .lean(); // Convert to plain JavaScript objects
-
-//     const total = libraries.length;
-
-//     if (total > 0) {
-//       // Get seat counts for all libraries in one efficient query
-//       const seatCounts = await Seat.aggregate([
-//         { $match: { isActive: true } }, // Only count active seats
-//         {
-//           $group: {
-//             _id: "$library",
-//             totalSeats: { $sum: 1 }
-//           }
-//         }
-//       ]);
-
-//       // Create a map for quick lookup of seat counts
-//       const seatCountMap = seatCounts.reduce((map, item) => {
-//         map[item._id.toString()] = item.totalSeats;
-//         return map;
-//       }, {});
-
-//       // Add seat count to each library while preserving all existing fields
-//       const librariesWithSeats = libraries.map(library => {
-//         // Create a new object with all original properties
-//         const libraryWithSeats = { ...library };
-//         // Add the seat count (default to 0 if no seats found)
-//         libraryWithSeats.totalSeats = seatCountMap[library._id.toString()] || 0;
-//         return libraryWithSeats;
-//       });
-
-//       return res.status(200).json({
-//         libraries: librariesWithSeats,
-//         total,
-//         success: true
-//       });
-//     }
-
-//     // If no libraries found
-//     res.status(200).json({
-//       libraries: [],
-//       total: 0,
-//       success: true
-//     });
-
-//   } catch (error) {
-//     console.error('Admin Library Fetch Error:', error);
-//     res.status(500).json({ 
-//       message: "Failed to fetch libraries", 
-//       error: process.env.NODE_ENV === 'development' ? error.message : undefined,
-//       success: false
-//     });
-//   }
-// };
 
 export const getAllLibrariesForAdmin = async (req, res) => {
   try {
@@ -407,7 +320,7 @@ export const updateLibrary = async (req, res) => {
   try {
     const { id } = req.params;
     const updateData = req.body;
-
+console.log(updateData.hourlyFee)
     // Find the existing library first
     const existingLibrary = await Library.findById(id);
     if (!existingLibrary) {
@@ -897,130 +810,6 @@ export const getNearestLibrariesByPinCode = async (req, res) => {
   }
 };
 
-
-// export const getNearestLibrariesByLatLon = async (req, res) => {
-//   let { userLat, userLon } = req.body;
-
-//   userLat = parseFloat(userLat);
-//   userLon = parseFloat(userLon);
-//   const MAX_DISTANCE_KM = 20; // 20km radius
-
-//   if (!userLat || !userLon) {
-//     return res.status(400).json({ 
-//       success: false,
-//       message: 'User latitude and longitude are required' 
-//     });
-//   }
-
-//   try {
-//     // First get all approved, unblocked libraries
-//     const libraries = await Library.find({ 
-//       status: "approved", 
-//       isBlocked: false 
-//     })
-//     .populate('libraryType')
-//     .populate('services');
-
-//     const enrichedLibraries = [];
-
-//     for (const library of libraries) {
-//       try {
-//         let libLat, libLon;
-        
-//         // Check if coordinates exist in the library document
-//         if (library.coordinates && library.coordinates.lat && library.coordinates.lng) {
-//           libLat = parseFloat(library.coordinates.lat);
-//           libLon = parseFloat(library.coordinates.lng);
-//         } 
-//         // Fallback to geocoding the address if coordinates don't exist
-//         else if (library.location) {
-//           const libLocation = await getLatLngFromAddress(library.location);
-//           if (!libLocation || !libLocation.lat || !libLocation.lon) {
-//             console.warn(`No coordinates for library: ${library.libraryName}`);
-//             continue;
-//           }
-//           libLat = libLocation.lat;
-//           libLon = libLocation.lon;
-//         } 
-//         // Skip if no coordinates or address
-//         else {
-//           console.warn(`No coordinates or address for library: ${library.libraryName}`);
-//           continue;
-//         }
-
-//         // Calculate distance
-//         const distance = await findDistanceBetweenLatAndLon(
-//           userLat, userLon, 
-//           libLat, libLon
-//         );
-
-//         // Skip libraries beyond 20km radius
-//         if (distance > MAX_DISTANCE_KM) {
-//           continue;
-//         }
-
-//         // Get all active seats for this library
-//         const seats = await Seat.find({ 
-//           library: library._id,
-//           isActive: true 
-//         });
-
-//         // Get all active time slots for this library
-//         const timeSlots = await TimeSlot.find({
-//           library: library._id,
-//           isActive: true
-//         }).populate('seats');
-
-//         // For each seat, find all assigned timeslots
-//         const seatsWithSlots = seats.map(seat => {
-//           const availableSlots = timeSlots
-//             .filter(slot => 
-//               slot.seats.some(s => s._id.toString() === seat._id.toString())
-//             )
-//             .sort((a, b) => a.startTime.localeCompare(b.startTime))
-//             .map(slot => ({
-//               _id: slot._id,
-//               startTime: slot.startTime,
-//               endTime: slot.endTime,
-//               price: slot.price
-//             }));
-
-//           return {
-//             ...seat.toObject(),
-//             availableSlots
-//           };
-//         });
-
-//         enrichedLibraries.push({
-//           ...library._doc,
-//           distanceInKm: Number(distance.toFixed(2)),
-//           seats: seatsWithSlots
-//         });
-
-//       } catch (err) {
-//         console.warn(`Skipping library [${library.libraryName}] due to error:`, err.message);
-//       }
-//     }
-
-//     // Sort by distance (nearest first)
-//     enrichedLibraries.sort((a, b) => a.distanceInKm - b.distanceInKm);
-
-//     res.status(200).json({
-//       success: true,
-//       data: enrichedLibraries
-//     });
-
-//   } catch (error) {
-//     console.error('❌ Error in nearest libraries:', error.message);
-//     res.status(500).json({ 
-//       success: false,
-//       message: 'Failed to fetch nearby libraries',
-//       error: error.message
-//     });
-//   }
-// };
-
-
 export const getNearestLibrariesByLatLon = async (req, res) => {
   let { userLat, userLon } = req.body;
 
@@ -1166,3 +955,296 @@ export const getNearestLibrariesByLatLon = async (req, res) => {
     });
   }
 };
+
+export const getAllLibrariesForMonthlyBooking = async (req, res) => {
+  try {
+    const { search = '', libraryType, services } = req.query;
+    
+    // Base query - only unblocked libraries with monthlyFee > 0
+    const query = {
+      isBlocked: false,
+      monthlyFee: { $gt: 0 } // Only libraries that offer monthly booking
+    };
+    
+    // Add search filters
+    if (search) {
+      query.$or = [
+        { libraryName: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+        { pinCode: { $regex: search, $options: 'i' } },
+        { location: { $regex: search, $options: 'i' } }
+      ];
+    }
+    
+    if (libraryType) {
+      query.libraryType = libraryType;
+    }
+    
+    if (services) {
+      query.services = { $in: Array.isArray(services) ? services : [services] };
+    }
+    
+    // Find libraries that match the criteria
+    const libraries = await Library.find(query)
+      .populate("libraryType")
+      .populate("services");
+    
+    // Get library IDs for seat query
+    const libraryIds = libraries.map(lib => lib._id);
+    
+    // Find all active monthly booking seats for these libraries
+    const monthlySeats = await Seat.find({
+      library: { $in: libraryIds },
+      seatFor: "monthly-booking",
+      isActive: true
+    })
+    
+    // Get all seat IDs to check for bookings
+    const seatIds = monthlySeats.map(seat => seat._id);
+    
+    // Find all active bookings for these seats
+    const existingBookings = await MonthlyBooking.find({
+      seat: { $in: seatIds },
+      status: { $in: ["confirmed", "pending"] } // Only consider active bookings
+    }).sort({ startDate: 1 }); // Sort by start date
+    
+    // Create a map of seat bookings { seatId: [bookings] }
+    const seatBookingsMap = existingBookings.reduce((map, booking) => {
+      const seatId = booking.seat.toString();
+      if (!map[seatId]) {
+        map[seatId] = [];
+      }
+      map[seatId].push({
+        startDate: booking.startDate,
+        endDate: booking.endDate,
+        status: booking.status
+      });
+      return map;
+    }, {});
+    
+    // Enhance seats with booking information
+    const seatsWithBookingInfo = monthlySeats.map(seat => {
+      const seatId = seat._id.toString();
+      const bookings = seatBookingsMap[seatId] || [];
+      
+      return {
+        ...seat.toObject(),
+        isAvailable: bookings.length === 0,
+        bookings: bookings.map(b => ({
+          from: b.startDate,
+          to: b.endDate,
+          status: b.status
+        })),
+        nextAvailableDate: bookings.length > 0 
+          ? new Date(Math.max(...bookings.map(b => new Date(b.endDate).getTime()))) 
+          : null
+      };
+    });
+    
+    // Group seats by library
+    const seatsByLibrary = seatsWithBookingInfo.reduce((acc, seat) => {
+      const libId = seat.library._id.toString();
+      if (!acc[libId]) {
+        acc[libId] = [];
+      }
+      acc[libId].push(seat);
+      return acc;
+    }, {});
+    
+    // Enhance libraries with seat information and monthly fee
+    const librariesWithSeats = libraries.map(library => {
+      const libraryId = library._id.toString();
+      const seats = seatsByLibrary[libraryId] || [];
+      
+      return {
+        ...library.toObject(),
+        monthlyFee: library.monthlyFee,
+        seats: seats,
+        availableSeatsCount: seats.filter(s => s.isAvailable).length,
+        totalSeatsCount: seats.length
+      };
+    });
+    
+    res.status(200).json({
+      libraries: librariesWithSeats,
+      success: true
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      message: "Failed to fetch libraries for monthly booking", 
+      error: error.message,
+      success: false
+    });
+  }
+};
+
+export const getNearMeLibrariesForMonthlyBookingLatLon = async (req, res) => {
+  let { userLat, userLon } = req.body;
+
+  userLat = parseFloat(userLat);
+  userLon = parseFloat(userLon);
+  const MAX_DISTANCE_KM = 20; // 20km radius
+
+  if (!userLat || !userLon) {
+    return res.status(400).json({ 
+      success: false,
+      message: 'User latitude and longitude are required' 
+    });
+  }
+
+  try {
+    // First get all approved, unblocked libraries with monthly booking
+    const libraries = await Library.find({ 
+      status: "approved", 
+      isBlocked: false,
+      monthlyFee: { $gt: 0 } // Only libraries that offer monthly booking
+    })
+    .populate('libraryType')
+    .populate('services');
+
+    const enrichedLibraries = [];
+
+    for (const library of libraries) {
+      try {
+        let libLat, libLon;
+        
+        // 1. First try to parse coordinates from the coordinates field
+        if (library.coordinates) {
+          try {
+            // Handle both stringified JSON and proper object
+            const coords = typeof library.coordinates === 'string' 
+              ? JSON.parse(library.coordinates)
+              : library.coordinates;
+            
+            if (coords.lat && coords.lng) {
+              libLat = parseFloat(coords.lat);
+              libLon = parseFloat(coords.lng);
+            }
+          } catch (parseError) {
+            console.warn(`Error parsing coordinates for library ${library.libraryName}:`, parseError.message);
+          }
+        }
+        
+        // 2. If still no coordinates, try geocoding
+        if ((!libLat || !libLon) && library.location) {
+          try {
+            const libLocation = await getLatLngFromAddress(library.location);
+            if (libLocation && libLocation.lat && libLocation.lon) {
+              libLat = libLocation.lat;
+              libLon = libLocation.lon;
+              
+              // Update library with coordinates for future use
+              await Library.findByIdAndUpdate(library._id, {
+                coordinates: JSON.stringify({
+                  lat: libLat,
+                  lng: libLon
+                })
+              });
+            }
+          } catch (geocodeError) {
+            console.warn(`Geocoding failed for ${library.libraryName}:`, geocodeError.message);
+            continue; // Skip this library if we can't get coordinates
+          }
+        }
+        
+        // Skip if still no coordinates
+        if (!libLat || !libLon) {
+          console.warn(`No coordinates for library: ${library.libraryName}`);
+          continue;
+        }
+
+        // Calculate distance
+        const distance = await findDistanceBetweenLatAndLon(
+          userLat, userLon, 
+          libLat, libLon
+        );
+
+        // Skip libraries beyond 20km radius
+        if (distance > MAX_DISTANCE_KM) {
+          continue;
+        }
+
+        // Get all active monthly booking seats for this library
+        const monthlySeats = await Seat.find({
+          library: library._id,
+          seatFor: "monthly-booking",
+          isActive: true
+        });
+        
+        // Get all seat IDs to check for bookings
+        const seatIds = monthlySeats.map(seat => seat._id);
+        
+        // Find all active bookings for these seats
+        const existingBookings = await MonthlyBooking.find({
+          seat: { $in: seatIds },
+          status: { $in: ["confirmed", "pending"] } // Only consider active bookings
+        }).sort({ startDate: 1 }); // Sort by start date
+        
+        // Create a map of seat bookings { seatId: [bookings] }
+        const seatBookingsMap = existingBookings.reduce((map, booking) => {
+          const seatId = booking.seat.toString();
+          if (!map[seatId]) {
+            map[seatId] = [];
+          }
+          map[seatId].push({
+            startDate: booking.startDate,
+            endDate: booking.endDate,
+            status: booking.status
+          });
+          return map;
+        }, {});
+        
+        // Enhance seats with booking information
+        const seatsWithBookingInfo = monthlySeats.map(seat => {
+          const seatId = seat._id.toString();
+          const bookings = seatBookingsMap[seatId] || [];
+          
+          return {
+            ...seat.toObject(),
+            isAvailable: bookings.length === 0,
+            bookings: bookings.map(b => ({
+              from: b.startDate,
+              to: b.endDate,
+              status: b.status
+            })),
+            nextAvailableDate: bookings.length > 0 
+              ? new Date(Math.max(...bookings.map(b => new Date(b.endDate).getTime()))) 
+              : null
+          };
+        });
+
+        // Only include libraries that have monthly seats
+        if (seatsWithBookingInfo.length > 0) {
+          enrichedLibraries.push({
+            ...library._doc,
+            distanceInKm: Number(distance.toFixed(2)),
+            monthlyFee: library.monthlyFee,
+            seats: seatsWithBookingInfo,
+            availableSeatsCount: seatsWithBookingInfo.filter(s => s.isAvailable).length,
+            totalSeatsCount: seatsWithBookingInfo.length
+          });
+        }
+
+      } catch (err) {
+        console.warn(`Skipping library [${library.libraryName}] due to error:`, err.message);
+      }
+    }
+
+    // Sort by distance (nearest first)
+    enrichedLibraries.sort((a, b) => a.distanceInKm - b.distanceInKm);
+
+    res.status(200).json({
+      success: true,
+      data: enrichedLibraries
+    });
+
+  } catch (error) {
+    console.error('❌ Error in nearest monthly booking libraries:', error.message);
+    res.status(500).json({ 
+      success: false,
+      message: 'Failed to fetch nearby libraries for monthly booking',
+      error: error.message
+    });
+  }
+};
+

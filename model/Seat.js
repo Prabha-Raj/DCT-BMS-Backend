@@ -15,6 +15,10 @@ const SeatSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    seatFor:{
+      type:String,
+      enum:["daily-booking", "monthly-booking"],
+    },
     isActive: {
       type: Boolean,
       default: true,

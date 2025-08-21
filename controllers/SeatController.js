@@ -2,11 +2,12 @@ import mongoose from "mongoose";
 import Seat from "../model/Seat.js";
 import Booking from "../model/Booking.js";
 import TimeSlot from "../model/TimeSlot.js";
+import MonthlyBooking from "../model/MonthlyBooking.js";
 
 // Create a new seat
 export const createSeat = async (req, res) => {
   try {
-    const { library, seatNumber, seatName } = req.body;
+    const { library, seatNumber, seatName, seatFor} = req.body;
 
     // Check if seat already exists by number or name
     const existingSeat = await Seat.findOne({
@@ -226,11 +227,12 @@ export const getSeatDetails = async (req, res) => {
   } catch (error) {
     console.error('Error in getSeatDetails:', error);
     res.status(500).json({ 
-      message: "Failed to fetch seat details",
+      message: "Failed to fetch seat details!",
       error: error.message 
     });
   }
 };
+
 // Update seat
 export const updateSeat = async (req, res) => {
   try {
@@ -444,3 +446,122 @@ export const addTimeSlotsForASeat = async (req, res) => {
     res.status(500).json({ message: "Internal server error", error: error.message });
   }
 };
+
+export const getMonthlySeatCompleteDetails = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid seat ID" });
+    }
+
+    // 1. Fetch seat details
+    const seat = await Seat.findById(id)
+      .populate('library', 'name address')
+      .lean();
+
+    if (!seat) {
+      return res.status(404).json({ message: "Seat not found" });
+    }
+
+    // 2. Fetch all monthly bookings for this seat
+    const allBookings = await MonthlyBooking.find({ seat: id })
+      .populate('user', 'name email mobile')
+      .populate('paymentId', 'status amount type')
+      .sort({ startDate: -1 })
+      .lean();
+
+    // 3. Calculate statistics
+    const currentDate = new Date();
+    const stats = {
+      totalBookings: allBookings.length,
+      activeBookings: allBookings.filter(b => 
+        b.status === 'confirmed' && 
+        new Date(b.endDate) >= currentDate
+      ).length,
+      completedBookings: allBookings.filter(b => 
+        b.status === 'completed' || 
+        (b.status === 'confirmed' && new Date(b.endDate) < currentDate)
+      ).length,
+      cancelledBookings: allBookings.filter(b => 
+        b.status === 'cancelled'
+      ).length,
+      rejectedBookings: allBookings.filter(b => 
+        b.status === 'rejected'
+      ).length,
+      pendingBookings: allBookings.filter(b => 
+        b.status === 'pending'
+      ).length,
+      revenueGenerated: allBookings
+        .filter(b => b.paymentStatus === 'paid')
+        .reduce((sum, booking) => sum + booking.amount, 0),
+      paymentStats: {
+        paid: allBookings.filter(b => b.paymentStatus === 'paid').length,
+        pending: allBookings.filter(b => b.paymentStatus === 'pending').length,
+        failed: allBookings.filter(b => b.paymentStatus === 'failed').length,
+        refunded: allBookings.filter(b => b.paymentStatus === 'refunded').length
+      },
+      monthlyTrend: calculateMonthlyTrend(allBookings),
+      userDistribution: calculateUserDistribution(allBookings)
+    };
+
+    // 4. Prepare response
+    const response = {
+      seatDetails: {
+        ...seat,
+        seatType: 'monthly-booking'
+      },
+      bookings: allBookings.map(booking => ({
+        ...booking,
+        duration: calculateDuration(booking.startDate, booking.endDate)
+      })),
+      statistics: stats,
+      meta: {
+        lastUpdated: new Date(),
+        totalRecords: allBookings.length
+      }
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    console.error('Error in getMonthlySeatCompleteDetails:', error);
+    res.status(500).json({ 
+      message: "Failed to fetch seat details.",
+      error: error.message 
+    });
+  }
+};
+
+// Helper functions
+function calculateDuration(startDate, endDate) {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const diffTime = Math.abs(end - start);
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // Days
+}
+
+function calculateMonthlyTrend(bookings) {
+  const trend = {};
+  bookings.forEach(booking => {
+    const monthYear = `${booking.startDate.getMonth()+1}/${booking.startDate.getFullYear()}`;
+    trend[monthYear] = (trend[monthYear] || 0) + 1;
+  });
+  return trend;
+}
+
+function calculateUserDistribution(bookings) {
+  const distribution = {};
+  bookings.forEach(booking => {
+    const userId = booking.user._id.toString();
+    if (!distribution[userId]) {
+      distribution[userId] = {
+        user: booking.user,
+        count: 0,
+        totalAmount: 0
+      };
+    }
+    distribution[userId].count++;
+    distribution[userId].totalAmount += booking.amount;
+  });
+  return Object.values(distribution).sort((a, b) => b.count - a.count);
+}

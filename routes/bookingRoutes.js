@@ -10,7 +10,7 @@ import {
   getBookingsByLibraryAndUser
 } from '../controllers/bookingController.js';
 import { protect, studentOnly, librarianOnly, adminOnly } from '../middleware/authMiddleware.js';
-import { createBooking } from '../controllers/bookingControllerNew.js';
+import { createBooking, getActiveBookingForCheckInCheckOut } from '../controllers/bookingControllerNew.js';
 
 const router = express.Router();
 
@@ -36,6 +36,10 @@ router.route('/:libraryId/library')
 
 router.route('/:id/status')
   .put(librarianOnly, updateBookingStatus);
+
+
+
+router.get('/:libraryId/active-bookings', protect, studentOnly, getActiveBookingForCheckInCheckOut);
 
 
 export default router;
