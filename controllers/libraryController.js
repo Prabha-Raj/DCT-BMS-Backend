@@ -956,6 +956,168 @@ export const getNearestLibrariesByLatLon = async (req, res) => {
   }
 };
 
+export const getNearestLibrariesByLatLonV1 = async (req, res) => {
+    let { userLat, userLon } = req.body;
+
+    userLat = parseFloat(userLat);
+    userLon = parseFloat(userLon);
+    const MAX_DISTANCE_KM = 20; // 20km radius
+
+    if (!userLat || !userLon) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'User latitude and longitude are required' 
+      });
+    }
+
+    try {
+      // First get all approved, unblocked libraries
+      const libraries = await Library.find({ 
+        status: "approved", 
+        isBlocked: false 
+      })
+      .populate('libraryType')
+      .populate('services');
+
+      const enrichedLibraries = [];
+
+      for (const library of libraries) {
+        try {
+          let libLat, libLon;
+          
+          // 1. Try to get coordinates from the coordinates field
+          if (library.coordinates) {
+            let coords = library.coordinates;
+            
+            // Handle stringified JSON
+            if (typeof coords === 'string') {
+              try {
+                // Remove any extra quotes or formatting issues
+                const cleanedString = coords.replace(/\\"/g, '"');
+                coords = JSON.parse(cleanedString);
+              } catch (parseError) {
+                console.warn(`Error parsing coordinates for library ${library.libraryName}:`, parseError.message);
+                coords = null;
+              }
+            }
+            
+            // Check for coordinates in various formats
+            if (coords) {
+              if (coords.lat !== undefined && coords.lng !== undefined) {
+                libLat = parseFloat(coords.lat);
+                libLon = parseFloat(coords.lng);
+              } else if (coords.lat !== undefined && coords.lon !== undefined) {
+                libLat = parseFloat(coords.lat);
+                libLon = parseFloat(coords.lon);
+              } else if (coords.latitude !== undefined && coords.longitude !== undefined) {
+                libLat = parseFloat(coords.latitude);
+                libLon = parseFloat(coords.longitude);
+              }
+            }
+          }
+          
+          // 2. If still no coordinates, try geocoding as a fallback
+          if ((!libLat || !libLon) && library.location) {
+            try {
+              const libLocation = await getLatLngFromAddress(library.location);
+              if (libLocation && libLocation.lat && libLocation.lon) {
+                libLat = libLocation.lat;
+                libLon = libLocation.lon;
+                
+                // Update library with coordinates for future use
+                await Library.findByIdAndUpdate(library._id, {
+                  coordinates: {
+                    lat: libLat,
+                    lng: libLon
+                  }
+                });
+              }
+            } catch (geocodeError) {
+              console.warn(`Geocoding failed for ${library.libraryName}:`, geocodeError.message);
+            }
+          }
+          
+          // Skip if still no coordinates
+          if (!libLat || !libLon) {
+            console.warn(`No coordinates for library: ${library.libraryName}`);
+            continue;
+          }
+
+          // Calculate distance
+          const distance = await findDistanceBetweenLatAndLon(
+            userLat, userLon, 
+            libLat, libLon
+          );
+
+          // Skip libraries beyond 20km radius
+          if (distance > MAX_DISTANCE_KM) {
+            continue;
+          }
+
+          // Get all active seats for this library
+          const seats = await Seat.find({ 
+            library: library._id,
+            isActive: true 
+          });
+
+          // Get all active time slots for this library
+          const timeSlots = await TimeSlot.find({
+            library: library._id,
+            isActive: true
+          }).populate('seats');
+
+          // For each seat, find all assigned timeslots and filter out seats with no available slots
+          const seatsWithSlots = seats.map(seat => {
+            const availableSlots = timeSlots
+              .filter(slot => 
+                slot.seats.some(s => s._id.toString() === seat._id.toString())
+              )
+              .sort((a, b) => a.startTime.localeCompare(b.startTime))
+              .map(slot => ({
+                _id: slot._id,
+                startTime: slot.startTime,
+                endTime: slot.endTime,
+                price: slot.price
+              }));
+
+            return {
+              ...seat.toObject(),
+              availableSlots
+            };
+          }).filter(seat => seat.availableSlots.length > 0); // Filter out seats with no available slots
+
+          // Only add library if it has seats with available slots
+          if (seatsWithSlots.length > 0) {
+            enrichedLibraries.push({
+              ...library._doc,
+              distanceInKm: Number(distance.toFixed(2)),
+              seats: seatsWithSlots
+            });
+          }
+
+        } catch (err) {
+          console.warn(`Skipping library [${library.libraryName}] due to error:`, err.message);
+        }
+      }
+
+      // Sort by distance (nearest first)
+      enrichedLibraries.sort((a, b) => a.distanceInKm - b.distanceInKm);
+
+      res.status(200).json({
+        success: true,
+        data: enrichedLibraries
+      });
+
+    } catch (error) {
+      console.error('❌ Error in nearest libraries:', error.message);
+      res.status(500).json({ 
+        success: false,
+        message: 'Failed to fetch nearby libraries',
+        error: error.message
+      });
+    }
+  };
+
 export const getAllLibrariesForMonthlyBooking = async (req, res) => {
   try {
     const { search = '', libraryType, services } = req.query;

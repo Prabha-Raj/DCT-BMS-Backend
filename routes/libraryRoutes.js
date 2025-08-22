@@ -15,7 +15,8 @@ import {
   getLibraryQRCode,
   updateLibraryStatus,
   getAllLibrariesForMonthlyBooking,
-  getNearMeLibrariesForMonthlyBookingLatLon
+  getNearMeLibrariesForMonthlyBookingLatLon,
+  getNearestLibrariesByLatLonV1
 } from "../controllers/libraryController.js";
 import { upload } from "../middleware/uploadMiddleware.js";
 import { adminOnly, librarianOnly, protect } from "../middleware/authMiddleware.js";
@@ -40,6 +41,7 @@ router.get("/for-students", getAllLibrariesForStudents);
 router.get('/search', getLibrariesByAddress);
 router.get("/for-monthly-booking", getAllLibrariesForMonthlyBooking);
 router.get('/nearme', getNearestLibrariesByLatLon);
+router.get('/nearme/v1', getNearestLibrariesByLatLonV1);
 router.get('/nearme/for-monthly-booking', getNearMeLibrariesForMonthlyBookingLatLon);
 router.get('/qr-code', protect, librarianOnly, getLibraryQRCode);
 router.get('/:pincode/nearest', getNearestLibrariesByPinCode);
