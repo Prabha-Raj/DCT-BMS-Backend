@@ -473,6 +473,7 @@ export const updateBookingStatus = async (req, res) => {
     // Process refund if rejecting a pending or confirmed booking
     if (status === 'rejected' && booking.paymentStatus === 'paid') {
       // console.log("jjj")
+
       await processRefund(
         booking.user._id,
         booking.amount,
@@ -576,7 +577,7 @@ export const cancelBooking = async (req, res) => {
     if (booking.paymentStatus === 'paid') {
       await processRefund(
         userId,
-        booking.totalAmount,
+        booking.amount,
         `Refund for cancelled booking on ${booking.bookingDate}`,
         [booking._id],
         session
