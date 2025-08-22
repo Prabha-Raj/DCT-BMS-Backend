@@ -113,19 +113,15 @@ export const loginUser = async (req, res) => {
       });
     }
 
-    // Token generation - FIRST save the user, THEN generate token
-    // user.tokenVersion += 1;
-    await user.save(); // Save the incremented version first
+
 
     const token = jwt.sign(
       { 
         id: user._id, 
         role: user.role, 
-        // tokenVersion: user.tokenVersion 
-        // Use the updated version
       },
       process.env.JWT_SECRET,
-      { expiresIn: "100000d" }
+      { expiresIn: "1y" }
     );
 
     const { password: _, ...userResponse } = user.toObject();
@@ -152,7 +148,7 @@ export const loginUser = async (req, res) => {
         libraryName: library.libraryName,
       };
     }
-
+    await user.save(); 
     res.status(200).json({
       success: true,
       message: "Login successful. Please verify OTP to continue.",
@@ -177,130 +173,6 @@ export const loginUser = async (req, res) => {
 // it for only those libraries can login which are approved or active/not-blocked
 
 // const STATIC_OTP = "123456";
-// export const loginUser = async (req, res) => {
-//   const { email, password, role } = req.body;
-
-//   try {
-//     // 1. Validate Input
-//     if (!email || !password || !role) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Email, password, and role are required.",
-//       });
-//     }
-
-//     // 2. Check if user exists
-//     const user = await User.findOne({ email });
-//     if (!user) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Email not registered. Please check or sign up first.",
-//       });
-//     }
-
-//     // 3. Role validation
-//     if (user.role !== role) {
-//       return res.status(403).json({
-//         success: false,
-//         message: "Invalid credencials for this user.",
-//       });
-//     }
-
-//     // 4. Block check
-//     if (user.isBlocked) {
-//       return res.status(403).json({
-//         success: false,
-//         message: "Your account has been blocked. Please contact support.",
-//       });
-//     }
-
-//     // 5. Password validation
-//     const isPasswordValid = await bcrypt.compare(password, user.password);
-//     if (!isPasswordValid) {
-//       return res.status(401).json({
-//         success: false,
-//         message: "Invalid password.",
-//       });
-//     }
-
-//     // 6. JWT Token
-//     const token = jwt.sign(
-//       { id: user._id, role: user.role },
-//       process.env.JWT_SECRET,
-//       { expiresIn: "7d" }
-//     );
-
-//     const { password: _, ...userResponse } = user.toObject();
-
-//     // 7. Librarian-specific library checks
-//     let libraryResponse = null;
-
-//     if (user.role === "librarian") {
-//       const library = await Library.findOne({ librarian: user._id });
-
-//       if (!library) {
-//         return res.status(404).json({
-//           success: false,
-//           message: `No library found for email: ${email}.`,
-//         });
-//       }
-
-//       if (library.isBlocked) {
-//         return res.status(403).json({
-//           success: false,
-//           message: "Your library has been blocked by the admin.",
-//           suggestion: "Please contact bookmyspace.today for more information.",
-//         });
-//       }
-
-//       const statusMessages = {
-//         pending: {
-//           message: "Your library is still pending approval.",
-//           suggestion: "Admin will review and approve it shortly.",
-//         },
-//         in_review: {
-//           message: "Your library is currently under review.",
-//           suggestion: "Please wait while the admin completes the review.",
-//         },
-//         rejected: {
-//           message: "Your library has been rejected by the admin.",
-//           suggestion: "Contact bookmyspace.today for more details or appeal.",
-//         },
-//       };
-
-//       if (statusMessages[library.status]) {
-//         return res.status(403).json({
-//           success: false,
-//           message: statusMessages[library.status].message,
-//           suggestion: statusMessages[library.status].suggestion,
-//         });
-//       }
-
-//       libraryResponse = {
-//         _id: library._id,
-//         libraryName: library.libraryName,
-//       };
-//     }
-
-//     // 8. Single Response for All Roles
-//     return res.status(200).json({
-//       success: true,
-//       message: "Login successful. OTP sent for verification.",
-//       token,
-//       user: userResponse,
-//       ...(libraryResponse && { library: libraryResponse }),
-//       otp: STATIC_OTP, // ⚠️ Only for testing – never send in production
-//     });
-
-//   } catch (error) {
-//     console.error(`Login error for email: ${email}`, error);
-//     return res.status(500).json({
-//       success: false,
-//       message: "Something went wrong during login.",
-//       error: error.message,
-//     });
-//   }
-// };
 
 export const verifyOtp = async (req, res) => {
   const { otp } = req.body;
@@ -369,7 +241,7 @@ export const googleLogin = async (req, res) => {
     const token = jwt.sign(
       { id: user._id, role: user.role },
       process.env.JWT_SECRET,
-      { expiresIn: "7d" }
+      { expiresIn: "1y" }
     );
 
     const { password: _, ...userData } = user.toObject();
