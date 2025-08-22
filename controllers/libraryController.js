@@ -985,11 +985,11 @@ export const getNearestLibrariesByLatLonV1 = async (req, res) => {
         try {
           let libLat, libLon;
           
-          // 1. Try to get coordinates from the coordinates field
+          // Only use existing coordinates, no geocoding fallback
           if (library.coordinates) {
             let coords = library.coordinates;
             
-            // Handle stringified JSON
+            // Handle both object and string formats
             if (typeof coords === 'string') {
               try {
                 // Remove any extra quotes or formatting issues
@@ -1001,7 +1001,7 @@ export const getNearestLibrariesByLatLonV1 = async (req, res) => {
               }
             }
             
-            // Check for coordinates in various formats
+            // Extract coordinates from the object
             if (coords) {
               if (coords.lat !== undefined && coords.lng !== undefined) {
                 libLat = parseFloat(coords.lat);
@@ -1016,28 +1016,7 @@ export const getNearestLibrariesByLatLonV1 = async (req, res) => {
             }
           }
           
-          // 2. If still no coordinates, try geocoding as a fallback
-          if ((!libLat || !libLon) && library.location) {
-            try {
-              const libLocation = await getLatLngFromAddress(library.location);
-              if (libLocation && libLocation.lat && libLocation.lon) {
-                libLat = libLocation.lat;
-                libLon = libLocation.lon;
-                
-                // Update library with coordinates for future use
-                await Library.findByIdAndUpdate(library._id, {
-                  coordinates: {
-                    lat: libLat,
-                    lng: libLon
-                  }
-                });
-              }
-            } catch (geocodeError) {
-              console.warn(`Geocoding failed for ${library.libraryName}:`, geocodeError.message);
-            }
-          }
-          
-          // Skip if still no coordinates
+          // Skip if no coordinates available
           if (!libLat || !libLon) {
             console.warn(`No coordinates for library: ${library.libraryName}`);
             continue;
@@ -1117,7 +1096,6 @@ export const getNearestLibrariesByLatLonV1 = async (req, res) => {
       });
     }
   };
-
 export const getAllLibrariesForMonthlyBooking = async (req, res) => {
   try {
     const { search = '', libraryType, services } = req.query;
