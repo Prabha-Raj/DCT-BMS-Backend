@@ -356,7 +356,7 @@ export const getAllLibrariesWithSeatAndTimeSloteForStudents = async (req, res) =
 
     res.status(200).json({
       success: true,
-      data: enrichedLibraries
+      libraries: enrichedLibraries
     });
 
   } catch (error) {
