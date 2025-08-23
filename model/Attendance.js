@@ -4,7 +4,7 @@ import mongoosePaginate from "mongoose-paginate-v2";
 const AttendanceSchema = new mongoose.Schema({
   student: { 
     type: mongoose.Schema.Types.ObjectId, 
-    ref: "Student",
+    ref: "User",
     required: true
   },
   library: { 
