@@ -256,11 +256,6 @@ export const createBooking = async (req, res) => {
   }
 };
 
-
-// import mongoose from "mongoose";
-// import Booking from "../model/Booking.js";
-// import MonthlyBooking from "../model/MonthlyBooking.js";
-
 // ---------------- CONTROLLER ----------------
 export const getActiveBookingForCheckInCheckOut = async (req, res) => {
   try {

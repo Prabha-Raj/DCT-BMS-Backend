@@ -46,6 +46,13 @@ export const getAllTransactionsAdmin = async (req, res) => {
           { path: 'library', select: 'libraryName' }
         ]
       })
+      .populate({
+        path: 'monthlyBooking',
+        populate: [
+          { path: 'seat', select: 'seatName seatNumber' },
+          { path: 'library', select: 'libraryName' }
+        ]
+      })
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));

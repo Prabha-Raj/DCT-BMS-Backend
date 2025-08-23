@@ -3,15 +3,17 @@ import {
   createMonthlyBooking, 
   getMyMonthlyBookings, 
   cancelMonthlyBooking, 
-  getMonthlyBookingsForLibrarian
+  getMonthlyBookingsForLibrarian,
+  getMonthlyBookingsForAdmin
 } from '../controllers/monthlyBookingController.js';
-import { librarianOnly, protect, studentOnly } from '../middleware/authMiddleware.js';
+import { adminOnly, librarianOnly, protect, studentOnly } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
 router.use(protect)
 
 router.post('/', studentOnly, createMonthlyBooking);
+router.get('/', adminOnly, getMonthlyBookingsForAdmin);
 router.get('/student/my-booking', studentOnly, getMyMonthlyBookings);
 router.get('/librarian/my-booking', librarianOnly, getMonthlyBookingsForLibrarian);
 router.patch('/:bookingId/cancel', studentOnly, cancelMonthlyBooking);

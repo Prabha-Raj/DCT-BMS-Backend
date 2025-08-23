@@ -381,3 +381,35 @@ export const getMonthlyBookingsForLibrarian = async (req, res) => {
     }
 };
 
+// Get user's monthly bookings for admin
+export const getMonthlyBookingsForAdmin = async (req, res) => {
+    try {
+        const { status, } = req.query;
+
+        const filter = { };
+        if (status) filter.status = status;
+
+        const bookings = await MonthlyBooking.find(filter)
+            .populate('user')
+            .populate('seat')
+            .populate('library')
+            .populate('paymentId', "-bookings")
+            
+            .sort({ bookingDate: -1 })
+
+        res.status(200).json({
+            success: true,
+            message: "These are your monthly bookings",
+            bookings
+        });
+
+    } catch (error) {
+        console.error("Error fetching monthly bookings:", error);
+        res.status(500).json({
+            success: false,
+            message: "Failed to fetch monthly bookings"
+        });
+    }
+};
+
+
