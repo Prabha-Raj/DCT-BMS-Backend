@@ -16,7 +16,8 @@ import {
   updateLibraryStatus,
   getAllLibrariesForMonthlyBooking,
   getNearMeLibrariesForMonthlyBookingLatLon,
-  getNearestLibrariesByLatLonV1
+  getNearestLibrariesByLatLonV1,
+  getAllLibrariesWithSeatAndTimeSloteForStudents
 } from "../controllers/libraryController.js";
 import { upload } from "../middleware/uploadMiddleware.js";
 import { adminOnly, librarianOnly, protect } from "../middleware/authMiddleware.js";
@@ -38,6 +39,7 @@ router.post("/create", (req, res, next) => {
 
 router.get("/for-admin", protect, adminOnly,getAllLibrariesForAdmin);
 router.get("/for-students", getAllLibrariesForStudents);
+router.get("/detaild-libraries/for-students", getAllLibrariesWithSeatAndTimeSloteForStudents);
 router.get('/search', getLibrariesByAddress);
 router.get("/for-monthly-booking", getAllLibrariesForMonthlyBooking);
 router.get('/nearme', getNearestLibrariesByLatLon);
