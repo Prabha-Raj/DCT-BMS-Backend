@@ -22,6 +22,8 @@ import dashboardRoutes from "./routes/dashboardRoutes.js";
 import settingRoutes from "./routes/settingRoutes.js";
 import monthlyBookingRoutes from "./routes/monthlyBookingRouter.js";
 import monthlyBookingAttendanceRoutes from "./routes/MonthlyBookingAttendanceRoutes.js";
+import checkInOutRoutes from './routes/checkInCheckOutRoutes.js';
+
 
 
 
@@ -58,7 +60,7 @@ app.use("/api/stats", dashboardRoutes);
 app.use("/api/setting", settingRoutes);
 app.use("/api/monthly-booking", monthlyBookingRoutes)
 app.use("/api/mb/attendance", monthlyBookingAttendanceRoutes)
-
+app.use('/api/checkinout', checkInOutRoutes);
 
 
 app.get("/", (req, res) => {
