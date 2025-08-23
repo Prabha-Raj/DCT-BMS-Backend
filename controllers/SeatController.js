@@ -3,19 +3,29 @@ import Seat from "../model/Seat.js";
 import Booking from "../model/Booking.js";
 import TimeSlot from "../model/TimeSlot.js";
 import MonthlyBooking from "../model/MonthlyBooking.js";
+import Library from "../model/LibraryModel.js";
 
 // Create a new seat
+
 export const createSeat = async (req, res) => {
   try {
-    const { library, seatNumber, seatName, seatFor} = req.body;
+    // Find library of logged-in librarian
+    const libraryData = await Library.findOne({ librarian: req.user._id });
+    if (!libraryData) {
+      return res.status(404).json({ message: "Library not found for this librarian" });
+    }
 
-    // Check if seat already exists by number or name
+    const { seatNumber, seatName, seatFor } = req.body;
+
+    // Validate seatFor manually (optional since enum already handles it)
+    if (!["daily-booking", "monthly-booking"].includes(seatFor)) {
+      return res.status(400).json({ message: "Invalid seat type. Must be 'daily-booking' or 'monthly-booking'" });
+    }
+
+    // Check if seat with same number or name already exists in this library
     const existingSeat = await Seat.findOne({
-      library,
-      $or: [
-        { seatNumber },
-        { seatName }
-      ]
+      library: libraryData._id,
+      $or: [{ seatNumber }, { seatName }]
     });
 
     if (existingSeat) {
@@ -23,15 +33,27 @@ export const createSeat = async (req, res) => {
         return res.status(400).json({ message: `Seat No. ${seatNumber} already exists in this library` });
       }
       if (existingSeat.seatName === seatName) {
-        return res.status(400).json({ message: `Seat Name ${seatName} already exists in this library` });
+        return res.status(400).json({ message: `Seat Name '${seatName}' already exists in this library` });
       }
     }
 
-    const seat = new Seat(req.body);
+    // Create seat and attach library ID
+    const seat = new Seat({
+      library: libraryData._id,
+      seatNumber,
+      seatName,
+      seatFor
+    });
+
     await seat.save();
 
-    res.status(201).json(seat);
+    res.status(201).json({
+      success: true,
+      message: "Seat created successfully",
+      seat
+    });
   } catch (error) {
+    console.error("Error creating seat:", error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -565,3 +587,166 @@ function calculateUserDistribution(bookings) {
   });
   return Object.values(distribution).sort((a, b) => b.count - a.count);
 }
+
+
+// Controller to check seat availability for a given time slot
+export const checkSeatAvailability = async (req, res) => {
+  try {
+    const { seatId, timeSlotId, bookingDate } = req.body;
+
+    // Validate required fields
+    if (!seatId || !timeSlotId || !bookingDate) {
+      return res.status(400).json({
+        success: false,
+        message: "Seat ID, Time Slot ID, and Booking Date are required"
+      });
+    }
+
+    // Check if seat exists and is active
+    const seat = await Seat.findById(seatId);
+    console.log(seat)
+    if (!seat) {
+      return res.status(400).json({
+        success: false,
+        message: "Seat not found || Invalid requested SeatId"
+      });
+    }
+
+    if (!seat.isActive) {
+      return res.status(400).json({
+        success: false,
+        message: "Seat is not active for booking"
+      });
+    }
+
+    // Check if time slot exists and is active
+    const timeSlot = await TimeSlot.findById(timeSlotId);
+    if (!timeSlot) {
+      return res.status(400).json({
+        success: false,
+        message: "TimeSlot not Found || Invalid rquested time slotId"
+      });
+    }
+    if (!timeSlot.isActive) {
+      return res.status(400).json({
+        success: false,
+        message: "Time slot not active for booking"
+      });
+    }
+
+    // Check if seat is assigned to this time slot
+    const isSeatInTimeSlot = timeSlot.seats.some(seatObjId => 
+      seatObjId.toString() === seatId.toString()
+    );
+
+    if (!isSeatInTimeSlot) {
+      return res.status(400).json({
+        success: false,
+        message: "This seat is not available for the selected time slot"
+      });
+    }
+
+    // Parse booking date and set date range
+    const bookingDateObj = new Date(bookingDate);
+    const startOfDay = new Date(bookingDateObj);
+    startOfDay.setHours(0, 0, 0, 0);
+    
+    const endOfDay = new Date(bookingDateObj);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    // Check for existing bookings
+    const existingBooking = await Booking.findOne({
+      seat: seatId,
+      timeSlot: timeSlotId,
+      bookingDate: {
+        $gte: startOfDay,
+        $lte: endOfDay
+      },
+      status: { $in: ["confirmed", "pending"] }
+    });
+
+    const isAvailable = !existingBooking;
+
+    // If not available, find next available date
+    let nextAvailableDate = null;
+    if (!isAvailable) {
+      nextAvailableDate = await findNextAvailableDate(seatId, timeSlotId, bookingDateObj);
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        isAvailable,
+        seat: {
+          _id: seat._id,
+          seatNumber: seat.seatNumber,
+          seatName: seat.seatName
+        },
+        timeSlot: {
+          _id: timeSlot._id,
+          startTime: timeSlot.startTime,
+          endTime: timeSlot.endTime,
+          price: timeSlot.price
+        },
+        yourSelectedDate: bookingDateObj,
+        nextAvailableDate: nextAvailableDate,
+        message: isAvailable 
+          ? "Seat is available for booking" 
+          : `Seat is already booked for ${bookingDate}. ${nextAvailableDate ? `Next available on: ${nextAvailableDate.toDateString()}` : 'No future availability found'}`
+      }
+    });
+
+  } catch (error) {
+    console.error("Check seat availability error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message
+    });
+  }
+};
+
+// Helper function to find next available date
+const findNextAvailableDate = async (seatId, timeSlotId, fromDate) => {
+  try {
+    // Start checking from the next day
+    let checkDate = new Date(fromDate);
+    checkDate.setDate(checkDate.getDate() + 1);
+    
+    // Check up to 30 days in future
+    const maxDaysToCheck = 30;
+    
+    for (let i = 0; i < maxDaysToCheck; i++) {
+      const startOfDay = new Date(checkDate);
+      startOfDay.setHours(0, 0, 0, 0);
+      
+      const endOfDay = new Date(checkDate);
+      endOfDay.setHours(23, 59, 59, 999);
+
+      // Check if seat is booked on this date
+      const existingBooking = await Booking.findOne({
+        seat: seatId,
+        timeSlot: timeSlotId,
+        bookingDate: {
+          $gte: startOfDay,
+          $lte: endOfDay
+        },
+        status: { $in: ["confirmed", "pending"] }
+      });
+
+      // If no booking found, this date is available
+      if (!existingBooking) {
+        return checkDate;
+      }
+
+      // Move to next day
+      checkDate.setDate(checkDate.getDate() + 1);
+    }
+
+    // If no available date found in the next 30 days
+    return null;
+  } catch (error) {
+    console.error("Error finding next available date:", error);
+    return null;
+  }
+};

@@ -10,11 +10,15 @@ import {
     bulkCreateSeats,
     getSeatDetails,
     addTimeSlotsForASeat,
-    getMonthlySeatCompleteDetails
+    getMonthlySeatCompleteDetails,
+    checkSeatAvailability
 } from '../controllers/SeatController.js';
-import { librarianOnly, protect } from '../middleware/authMiddleware.js';
+import { librarianOnly, protect, studentOnly } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
+
+// public route
+router.post('/check-availability', checkSeatAvailability);
 
 // Apply protect middleware to all routes
 router.use(protect);
@@ -31,5 +35,6 @@ router.post('/:id/time-slots', librarianOnly,addTimeSlotsForASeat);
 router.delete('/:id', librarianOnly, deleteSeat);
 router.patch('/:id/toggle-status', librarianOnly, toggleSeatStatus);
 router.get('/library/:libraryId', getSeatsByLibrary);
+
 
 export default router;
