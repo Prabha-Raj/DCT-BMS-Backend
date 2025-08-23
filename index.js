@@ -34,6 +34,7 @@ dotenv.config();
 // Database connection
 ConnectDB();
 
+
 // Required for __dirname in ES Modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -43,6 +44,10 @@ app.use(express.json());
 app.use(cors());
 app.use(express.urlencoded({ extended: true }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
+// Always trust first proxy (safe for both local + production)
+app.set("trust proxy", 1);
+
 
 // Routes
 app.use("/api/users", userRoutes);
