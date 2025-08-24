@@ -5,6 +5,7 @@ import MonthlyBooking from '../model/MonthlyBooking.js';
 import Attendance from '../model/Attendance.js';
 import MonthlyBookingAttendance from '../model/MonthlyBookingAttendance.js';
 import moment from 'moment';
+import TimeSlot from '../model/TimeSlot.js';
 
 // Function to update booking statuses
 const updateBookingStatuses = async () => {
