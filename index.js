@@ -23,6 +23,7 @@ import settingRoutes from "./routes/settingRoutes.js";
 import monthlyBookingRoutes from "./routes/monthlyBookingRouter.js";
 import monthlyBookingAttendanceRoutes from "./routes/MonthlyBookingAttendanceRoutes.js";
 import checkInOutRoutes from './routes/checkInCheckOutRoutes.js';
+import startBookingStatusCron from "./utils/BookingStatusCronJob.js";
 
 
 
@@ -78,6 +79,11 @@ setupSocket(server); // initializes Socket.IO
 
 // ✅ Start server
 const PORT = process.env.PORT || 4001;
+
+// ✅ Start the cron job after server starts
 server.listen(PORT, () => {
   console.log(`Server is live on port: ${PORT}`);
+  
+  // ✅ Start the cron job once server is running
+  startBookingStatusCron();
 });
