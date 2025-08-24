@@ -8,11 +8,11 @@ import Booking from "../model/Booking.js";
 // Helper function to check if current time is within a time slot
 const isWithinTimeSlot = (timeSlot, currentTime) => {
   if (!timeSlot || !timeSlot.startTime || !timeSlot.endTime) return false;
-  
+
   const currentMoment = moment(currentTime);
   const startMoment = moment(timeSlot.startTime, "HH:mm");
   const endMoment = moment(timeSlot.endTime, "HH:mm");
-  
+
   return currentMoment.isBetween(startMoment, endMoment, null, '[]');
 };
 
@@ -93,7 +93,7 @@ export const handleCheckInOut = async (req, res) => {
         } else {
           // Check if there's an active session
           const activeSessionIndex = attendance.sessions.findIndex(session => !session.checkOutTime);
-          
+
           if (activeSessionIndex === -1) {
             // No active session, create new check-in
             attendance.sessions.push({
@@ -133,7 +133,7 @@ export const handleCheckInOut = async (req, res) => {
 
         // Check if there's an active session to check out
         const activeSessionIndex = attendance.sessions.findIndex(session => !session.checkOutTime);
-        
+
         if (activeSessionIndex === -1) {
           return res.status(400).json({
             success: false,
@@ -170,18 +170,30 @@ export const handleCheckInOut = async (req, res) => {
     const todayEnd = new Date(today);
     todayEnd.setDate(todayEnd.getDate() + 1);
 
-    const dailyBooking = await Booking.findOne({
+    // Different find conditions for checkin vs checkout
+    let findConditions = {
       user: studentId,
       library: libraryId,
       bookingDate: { $gte: todayStart, $lt: todayEnd },
-      status: "confirmed",
       paymentStatus: "paid"
-    }).populate("timeSlot");
+    };
+
+    if (action === 'checkin') {
+        findConditions.status = { $in: ["confirmed", "checked-in"] };
+    } else if (action === 'checkout') {
+      findConditions.status = "checked-in";
+    }
+
+    const dailyBooking = await Booking.findOne(findConditions).populate("timeSlot");
 
     if (!dailyBooking) {
+      const message = action === 'checkin'
+        ? "No confirmed booking found for today"
+        : "No active check-in found for today";
+
       return res.status(400).json({
         success: false,
-        message: "No active booking found for today"
+        message: message
       });
     }
 
@@ -219,6 +231,13 @@ export const handleCheckInOut = async (req, res) => {
         });
 
         await attendance.save();
+
+        // ✅ UPDATE: Change booking status to "checked-in"
+        await Booking.findByIdAndUpdate(
+          dailyBooking._id,
+          { status: "checked-in" },
+          { new: true }
+        );
 
         const populatedAttendance = await Attendance.findById(attendance._id)
           .populate("student", "name email")
@@ -264,6 +283,13 @@ export const handleCheckInOut = async (req, res) => {
         attendance.checkOutTime = now;
         attendance.durationMinutes = Math.floor((now - attendance.checkInTime) / (1000 * 60));
         await attendance.save();
+
+        // ✅ UPDATE: Change booking status to "completed"
+        await Booking.findByIdAndUpdate(
+          dailyBooking._id,
+          { status: "completed" },
+          { new: true }
+        );
 
         const populatedAttendance = await Attendance.findById(attendance._id)
           .populate("student", "name email")
@@ -319,7 +345,7 @@ export const getCheckInStatus = async (req, res) => {
       });
 
       const activeSession = attendance?.sessions?.find(session => !session.checkOutTime);
-      
+
       return res.status(200).json({
         success: true,
         type: "monthly",
@@ -356,7 +382,7 @@ export const getCheckInStatus = async (req, res) => {
       const isCheckedIn = !!attendance && !attendance.checkOutTime;
       const canCheckIn = !attendance || (attendance && attendance.checkOutTime);
       const canCheckOut = !!attendance && !attendance.checkOutTime;
-      
+
       // Check if current time is within the booked time slot
       const isWithinSlot = isWithinTimeSlot(dailyBooking.timeSlot, now);
       const canCheckInNow = canCheckIn && isWithinSlot;
