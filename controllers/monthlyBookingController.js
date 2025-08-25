@@ -64,7 +64,6 @@ export const createMonthlyBooking = async (req, res) => {
                 }
                 const commission = await Setting.findOne()
                 const bookingCommission = commission?.bookingCommission || 0
-                // console.log(commission, bookingCommission)
                 const amount = libraryData.monthlyFee + bookingCommission;
                 if (amount <= 0) {
                     throw {
