@@ -622,14 +622,112 @@ export const cancelBooking = async (req, res) => {
 
 
 // Get all bookings with pagination
+// export const getAllBookings = async (req, res) => {
+//   try {
+//     const { page = 1, limit = 20 } = req.query;
+//     const skip = (page - 1) * limit;
+
+//     const total = await Booking.countDocuments();
+
+//     const bookings = await Booking.find()
+//       .populate({
+//         path: 'user',
+//         select: 'name email phone role'
+//       })
+//       .populate({
+//         path: 'seat',
+//         select: 'seatNumber seatName'
+//       })
+//       .populate({
+//         path: 'timeSlot',
+//         select: 'startTime endTime price'
+//       })
+//       .populate({
+//         path: 'library',
+//         populate: [
+//           { path: 'libraryType', select: 'type' },
+//           { path: 'services', select: 'name icon' },
+//           { path: 'librarian', select: 'name email phone' }
+//         ],
+//         select: 'libraryName email contactNumber libraryType services location pinCode logo images timingFrom timingTo totalBooks isBlocked isPopular'
+//       })
+//       .populate({
+//         path: 'paymentId',
+//         select: 'amount type status createdAt'
+//       })
+//       .sort({ bookingDate: -1, createdAt: -1 })
+//       .skip(parseInt(skip))
+//       .limit(parseInt(limit));
+
+//     res.status(200).json({
+//       success: true,
+//       count: bookings.length,
+//       total,
+//       page: parseInt(page),
+//       pages: Math.ceil(total / limit),
+//       data: bookings
+//     });
+
+//   } catch (error) {
+//     console.error("getAllBookings error:", error);
+//     res.status(500).json({
+//       success: false,
+//       message: error.message
+//     });
+//   }
+// };
+
 export const getAllBookings = async (req, res) => {
   try {
-    const { page = 1, limit = 20 } = req.query;
+    const { 
+      page = 1, 
+      limit = 20, 
+      search, 
+      status, 
+      paymentStatus, 
+      startDate, 
+      endDate 
+    } = req.query;
+    
     const skip = (page - 1) * limit;
+    
+    // Build filter object
+    let filter = {};
+    
+    // Search filter (user name, email, seat number, library name)
+    if (search) {
+      filter.$or = [
+        { 'user.name': { $regex: search, $options: 'i' } },
+        { 'user.email': { $regex: search, $options: 'i' } },
+        { 'seat.seatNumber': { $regex: search, $options: 'i' } },
+        { 'library.libraryName': { $regex: search, $options: 'i' } }
+      ];
+    }
+    
+    // Status filter
+    if (status && status !== 'all') {
+      filter.status = status;
+    }
+    
+    // Payment status filter
+    if (paymentStatus && paymentStatus !== 'all') {
+      filter.paymentStatus = paymentStatus;
+    }
+    
+    // Date range filter
+    if (startDate || endDate) {
+      filter.bookingDate = {};
+      if (startDate) {
+        filter.bookingDate.$gte = new Date(startDate);
+      }
+      if (endDate) {
+        filter.bookingDate.$lte = new Date(endDate);
+      }
+    }
 
-    const total = await Booking.countDocuments();
+    const total = await Booking.countDocuments(filter);
 
-    const bookings = await Booking.find()
+    const bookings = await Booking.find(filter)
       .populate({
         path: 'user',
         select: 'name email phone role'
@@ -654,10 +752,6 @@ export const getAllBookings = async (req, res) => {
       .populate({
         path: 'paymentId',
         select: 'amount type status createdAt'
-      })
-      .populate({
-        path: 'rejectedBy',
-        select: 'name email'
       })
       .sort({ bookingDate: -1, createdAt: -1 })
       .skip(parseInt(skip))

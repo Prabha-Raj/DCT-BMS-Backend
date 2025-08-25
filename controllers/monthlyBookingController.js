@@ -384,34 +384,139 @@ export const getMonthlyBookingsForLibrarian = async (req, res) => {
 };
 
 // Get user's monthly bookings for admin
-export const getMonthlyBookingsForAdmin = async (req, res) => {
-    try {
-        const { status, } = req.query;
+// export const getMonthlyBookingsForAdmin = async (req, res) => {
+//     try {
+//         const { status, } = req.query;
 
-        const filter = { };
-        if (status) filter.status = status;
+//         const filter = { };
+//         if (status) filter.status = status;
 
-        const bookings = await MonthlyBooking.find(filter)
-            .populate('user')
-            .populate('seat')
-            .populate('library')
-            .populate('paymentId', "-bookings")
+//         const bookings = await MonthlyBooking.find(filter)
+//             .populate('user')
+//             .populate('seat')
+//             .populate('library')
+//             .populate('paymentId', "-bookings")
             
-            .sort({ bookingDate: -1 })
+//             .sort({ bookingDate: -1 })
 
-        res.status(200).json({
-            success: true,
-            message: "These are your monthly bookings",
-            bookings
-        });
+//         res.status(200).json({
+//             success: true,
+//             message: "These are your monthly bookings",
+//             bookings
+//         });
 
-    } catch (error) {
-        console.error("Error fetching monthly bookings:", error);
-        res.status(500).json({
-            success: false,
-            message: "Failed to fetch monthly bookings"
-        });
+//     } catch (error) {
+//         console.error("Error fetching monthly bookings:", error);
+//         res.status(500).json({
+//             success: false,
+//             message: "Failed to fetch monthly bookings"
+//         });
+//     }
+// };
+
+// Get user's monthly bookings for admin
+export const getMonthlyBookingsForAdmin = async (req, res) => {
+  try {
+    const { 
+      page = 1, 
+      limit = 20, 
+      search, 
+      status, 
+      paymentStatus, 
+      startDate, 
+      endDate 
+    } = req.query;
+    
+    const skip = (page - 1) * limit;
+    
+    // Build filter object
+    let filter = {};
+    
+    // Search filter (user name, email, seat number, library name)
+    if (search) {
+      filter.$or = [
+        { 'user.name': { $regex: search, $options: 'i' } },
+        { 'user.email': { $regex: search, $options: 'i' } },
+        { 'seat.seatNumber': { $regex: search, $options: 'i' } },
+        { 'library.libraryName': { $regex: search, $options: 'i' } }
+      ];
     }
+    
+    // Status filter
+    if (status && status !== 'all') {
+      filter.status = status;
+    }
+    
+    // Payment status filter
+    if (paymentStatus && paymentStatus !== 'all') {
+      filter.paymentStatus = paymentStatus;
+    }
+    
+    // Date range filter for booking dates
+    if (startDate || endDate) {
+      filter.$and = [];
+      
+      if (startDate) {
+        filter.$and.push({
+          $or: [
+            { startDate: { $gte: new Date(startDate) } },
+            { endDate: { $gte: new Date(startDate) } }
+          ]
+        });
+      }
+      
+      if (endDate) {
+        filter.$and.push({
+          $or: [
+            { startDate: { $lte: new Date(endDate) } },
+            { endDate: { $lte: new Date(endDate) } }
+          ]
+        });
+      }
+      
+      // If no conditions were added, remove the $and array
+      if (filter.$and.length === 0) {
+        delete filter.$and;
+      }
+    }
+
+    const total = await MonthlyBooking.countDocuments(filter);
+
+    const bookings = await MonthlyBooking.find(filter)
+      .populate({
+        path: 'user',
+        select: 'name email mobile role'
+      })
+      .populate({
+        path: 'seat',
+        select: 'seatNumber seatName'
+      })
+      .populate({
+        path: 'library',
+        select: 'libraryName email contactNumber location timingFrom timingTo'
+      })
+      .populate({
+        path: 'paymentId',
+        select: 'amount type status createdAt'
+      })
+      .sort({ bookedAt: -1, createdAt: -1 })
+      .skip(parseInt(skip))
+      .limit(parseInt(limit));
+
+    res.status(200).json({
+      success: true,
+      count: bookings.length,
+      total,
+      page: parseInt(page),
+      pages: Math.ceil(total / limit),
+      data: bookings
+    });
+
+  } catch (error) {
+    console.error("Error fetching monthly bookings:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch monthly bookings"
+    });
+  }
 };
-
-
