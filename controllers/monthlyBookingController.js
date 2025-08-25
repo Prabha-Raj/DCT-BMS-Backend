@@ -5,6 +5,7 @@ import Transaction from "../model/Transaction.js";
 import Library from "../model/LibraryModel.js";
 import Seat from "../model/Seat.js";
 import User from "../model/User.js";
+import Setting from "../model/Settings.js";
 
 const checkMonthlyBookingConflicts = async (seatId, startDate, endDate, session) => {
     const existingBookings = await MonthlyBooking.find({
@@ -61,8 +62,10 @@ export const createMonthlyBooking = async (req, res) => {
                         isOperational: true
                     };
                 }
-
-                const amount = libraryData.monthlyFee;
+                const commission = await Setting.findOne()
+                const bookingCommission = commission?.bookingCommission || 0
+                console.log(commission, bookingCommission)
+                const amount = libraryData.monthlyFee + bookingCommission;
                 if (amount <= 0) {
                     throw {
                         statusCode: 400,
