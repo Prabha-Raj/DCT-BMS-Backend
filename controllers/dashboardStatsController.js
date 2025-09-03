@@ -6,6 +6,7 @@ import Attendance from "../model/Attendance.js";
 import Inquiry from "../model/InquiryModel.js";
 import Transaction from "../model/Transaction.js";
 import Wallet from "../model/Wallet.js";
+import { getRevenue } from "./earningController.js";
 
 // Admin Dashboard Stats
 // export const adminStats = async (req, res) => {
@@ -867,11 +868,11 @@ export const librarianStats = async (req, res) => {
         }
       })
     ]);
-
+    const totalEarningStats = await getRevenue(libraryId);
     res.status(200).json({
       success: true,
       data: {
-        library:library,
+        library: library,
         counts: {
           bookings: totalBookings,
           attendances: totalAttendances,
@@ -880,6 +881,7 @@ export const librarianStats = async (req, res) => {
         },
         bookingStatus: formattedBookingStats,
         revenue,
+        totalEarningStats,
         attendance,
         seatStats,
         recentBookings,
