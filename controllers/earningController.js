@@ -157,7 +157,6 @@ export const getMyEarningsByLibrary = async (req, res) => {
 
 export const getRevenue = async (libraryId) => {
   try {
-    console.log(libraryId)
     if (!libraryId) {
       return 'Library ID is required';
     }
@@ -179,12 +178,11 @@ export const getRevenue = async (libraryId) => {
       paymentStatus: 'paid',
       bookingDate: { $gte: todayStart, $lte: todayEnd }
     })).length;
-    const todaysMonthlyBookings = await MonthlyBooking.find({
+    const todaysMonthlyBookings = (await MonthlyBooking.find({
       library: libraryId,
       paymentStatus: 'paid',
       startDate: { $gte: todayStart, $lte: todayEnd }
-    });
-   console.log("fghj",totalOneTimeBookings)
+    })).length;
     const todayBookingEarnings = await Booking.find({
       library: libraryId,
       status: { $nin: ['pending', 'cancelled', 'rejected'] },
@@ -205,7 +203,7 @@ export const getRevenue = async (libraryId) => {
       paymentStatus: 'paid',
       startDate: { $gte: todayStart, $lte: todayEnd }
     });
-
+    // console.log(todayMonthlyBookings, todaysMonthlyBookings)
     // Earnings
     const totalBookingEarnings = earningBookings.reduce((sum, booking) => sum + (booking.amount || 0), 0);
     const totalMonthlyEarnings = earningMonthlyBookings.reduce((sum, booking) => sum + (booking.amount || 0), 0);
