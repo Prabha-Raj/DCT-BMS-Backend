@@ -1246,6 +1246,7 @@ export const getAllLibrariesForMonthlyBooking = async (req, res) => {
     // Base query - only unblocked libraries with monthlyFee > 0
     const query = {
       isBlocked: false,
+      status:"approved",
       monthlyFee: { $gt: 0 } // Only libraries that offer monthly booking
     };
     
