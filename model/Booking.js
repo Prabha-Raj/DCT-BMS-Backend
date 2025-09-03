@@ -83,12 +83,12 @@ BookingSchema.index({ seat: 1, bookingDate: 1 });
 BookingSchema.index({ library: 1, bookingDate: 1 });
 BookingSchema.index({ timeSlot: 1, bookingDate: 1 });
 
-// Virtual for cancellation window
+// Virtual for cancellation window (within 1 hour of creation, status pending/confirmed)
 BookingSchema.virtual('canCancel').get(function() {
   const now = new Date();
-  const bookingTime = new Date(this.bookingDate);
-  const oneHourBefore = new Date(bookingTime.getTime() - (60 * 60 * 1000));
-  return now < oneHourBefore && this.status === 'confirmed';
+  const createdAt = new Date(this.createdAt);
+  const oneHourAfterCreation = new Date(createdAt.getTime() + 60 * 60 * 1000);
+  return (['pending', 'confirmed'].includes(this.status)) && (now <= oneHourAfterCreation);
 });
 
 export default mongoose.model("Booking", BookingSchema);

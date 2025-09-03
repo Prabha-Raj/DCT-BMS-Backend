@@ -555,21 +555,32 @@ export const cancelBooking = async (req, res) => {
       });
     }
 
-    // Check if booking can be cancelled
-    if (booking.status !== 'confirmed' && booking.status !== 'pending') {
+    // Prevent cancelling an already cancelled booking
+    if (booking.status === 'cancelled') {
       await session.abortTransaction();
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        message: "Only pending or confirmed bookings can be cancelled" 
+        message: "This booking is already cancelled."
+      });
+    }
+    // Only allow cancellation for 'pending' or 'confirmed' bookings
+    if (!['pending', 'confirmed'].includes(booking.status)) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: "Only bookings with status 'pending' or 'confirmed' can be cancelled."
       });
     }
 
-    // Check cancellation window using the virtual property
-    if (!booking.canCancel && booking.status === 'confirmed') {
+    // Check cancellation window: only allow within 1 hour of booking creation
+    const now = new Date();
+    const bookingCreatedAt = new Date(booking.createdAt);
+    const oneHourAfterCreation = new Date(bookingCreatedAt.getTime() + 60 * 60 * 1000);
+    if (now > oneHourAfterCreation) {
       await session.abortTransaction();
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        message: "Cancellation window has passed (must cancel at least 1 hour before booking time)" 
+        message: "You can only cancel your booking within 1 hour of creation. Cancellation window has passed."
       });
     }
 
