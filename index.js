@@ -24,7 +24,10 @@ import monthlyBookingRoutes from "./routes/monthlyBookingRouter.js";
 import monthlyBookingAttendanceRoutes from "./routes/MonthlyBookingAttendanceRoutes.js";
 import checkInOutRoutes from './routes/checkInCheckOutRoutes.js';
 import startBookingStatusCron from "./utils/BookingStatusCronJob.js";
-
+import earningRoutes from "./routes/earningRoutes.js";
+import bankDetailsRoutes from "./routes/bankDetailsRoutes.js";
+import withdrawRequestRoutes from "./routes/withdrawRequestRoutes.js";
+import managePasswordRoutes from "./routes/managePasswordRoutes.js";
 
 
 
@@ -67,6 +70,12 @@ app.use("/api/setting", settingRoutes);
 app.use("/api/monthly-booking", monthlyBookingRoutes)
 app.use("/api/mb/attendance", monthlyBookingAttendanceRoutes)
 app.use('/api/checkinout', checkInOutRoutes);
+app.use("/api/earnings", earningRoutes);
+app.use("/api/bank-details", bankDetailsRoutes);
+app.use("/api/withdraw-requests", withdrawRequestRoutes);
+app.use("/api/password", managePasswordRoutes);
+
+
 
 
 app.get("/", (req, res) => {
