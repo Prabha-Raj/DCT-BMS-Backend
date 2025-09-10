@@ -345,58 +345,27 @@ export const cancelMonthlyBooking = async (req, res) => {
 
 
 // Get user's monthly bookings
-export const getMonthlyBookingsForLibrarian = async (req, res) => {
-    try {
-        const user = req.user._id;
-        console.log(user)
-        const { status, } = req.query;
-
-        const library = await Library.findOne({ librarian: user })
-        if (!library) {
-            return res.status(404).json({
-                success: false,
-                message: "Your library not found"
-            })
-        }
-
-        const filter = { library: library._id };
-        if (status) filter.status = status;
-
-        const bookings = await MonthlyBooking.find(filter)
-            .populate('seat')
-            .populate('library')
-            .populate('paymentId')
-            .sort({ bookingDate: -1 })
-
-        res.status(200).json({
-            success: true,
-            message: "These are your monthly bookings",
-            bookings
-        });
-
-    } catch (error) {
-        console.error("Error fetching monthly bookings:", error);
-        res.status(500).json({
-            success: false,
-            message: "Failed to fetch monthly bookings"
-        });
-    }
-};
-
-// Get user's monthly bookings for admin
-// export const getMonthlyBookingsForAdmin = async (req, res) => {
+// export const getMonthlyBookingsForLibrarian = async (req, res) => {
 //     try {
+//         const user = req.user._id;
+//         console.log(user)
 //         const { status, } = req.query;
 
-//         const filter = { };
+//         const library = await Library.findOne({ librarian: user })
+//         if (!library) {
+//             return res.status(404).json({
+//                 success: false,
+//                 message: "Your library not found"
+//             })
+//         }
+
+//         const filter = { library: library._id };
 //         if (status) filter.status = status;
 
 //         const bookings = await MonthlyBooking.find(filter)
-//             .populate('user')
 //             .populate('seat')
 //             .populate('library')
-//             .populate('paymentId', "-bookings")
-            
+//             .populate('paymentId')
 //             .sort({ bookingDate: -1 })
 
 //         res.status(200).json({
@@ -413,6 +382,119 @@ export const getMonthlyBookingsForLibrarian = async (req, res) => {
 //         });
 //     }
 // };
+
+
+export const getMonthlyBookingsForLibrarian = async (req, res) => {
+  try {
+    const user = req.user._id;
+    const { status, date, startDate, endDate, paymentStatus, page = 1, limit = 10 } = req.query;
+
+    const library = await Library.findOne({ librarian: user });
+    if (!library) {
+      return res.status(404).json({
+        success: false,
+        message: "Your library not found"
+      });
+    }
+
+    // Build filter object
+    const filter = { library: library._id };
+
+    if (status) filter.status = status;
+    if (paymentStatus) filter.paymentStatus = paymentStatus;
+
+    // Date filtering
+    if (date) {
+      const targetDate = new Date(date);
+      filter.startDate = { $lte: targetDate };
+      filter.endDate = { $gte: targetDate };
+    }
+
+    if (startDate && endDate) {
+      filter.startDate = { $lte: new Date(endDate) };
+      filter.endDate = { $gte: new Date(startDate) };
+    } else if (startDate) {
+      filter.endDate = { $gte: new Date(startDate) };
+    } else if (endDate) {
+      filter.startDate = { $lte: new Date(endDate) };
+    }
+
+    // Pagination setup
+    const pageNumber = parseInt(page, 10) || 1;
+    const pageSize = parseInt(limit, 10) || 10;
+    const skip = (pageNumber - 1) * pageSize;
+
+    // Total bookings count (before pagination)
+    const totalBookings = await MonthlyBooking.countDocuments(filter);
+
+    // Get paginated bookings
+    const bookings = await MonthlyBooking.find(filter)
+      .populate("seat")
+      .populate("library")
+      .populate("paymentId")
+      .populate("user", "name email")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(pageSize);
+
+    // Calculate statistics
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const todayBookings = await MonthlyBooking.countDocuments({
+      ...filter,
+      bookedAt: { $gte: today, $lt: tomorrow }
+    });
+
+    const statusCounts = await MonthlyBooking.aggregate([
+      { $match: filter },
+      { $group: { _id: "$status", count: { $sum: 1 } } }
+    ]);
+
+    const paymentStatusCounts = await MonthlyBooking.aggregate([
+      { $match: filter },
+      { $group: { _id: "$paymentStatus", count: { $sum: 1 } } }
+    ]);
+
+    const revenueStats = await MonthlyBooking.aggregate([
+      { $match: { ...filter, paymentStatus: "paid" } },
+      { $group: { _id: null, totalRevenue: { $sum: "$amount" } } }
+    ]);
+
+    const totalRevenue =
+      revenueStats.length > 0 ? revenueStats[0].totalRevenue : 0;
+
+    res.status(200).json({
+      success: true,
+      message: "These are your monthly bookings",
+      bookings,
+      pagination: {
+        total: totalBookings,
+        page: pageNumber,
+        limit: pageSize,
+        totalPages: Math.ceil(totalBookings / pageSize)
+      },
+      stats: {
+        total: totalBookings,
+        today: todayBookings,
+        byStatus: statusCounts,
+        byPaymentStatus: paymentStatusCounts,
+        revenue: totalRevenue
+      }
+    });
+  } catch (error) {
+    console.error("Error fetching monthly bookings:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch monthly bookings"
+    });
+  }
+};
+
+
 
 // Get user's monthly bookings for admin
 export const getMonthlyBookingsForAdmin = async (req, res) => {
