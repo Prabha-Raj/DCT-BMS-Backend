@@ -49,13 +49,20 @@ app.use(express.json());
 // ✅ Universal CORS setup
 app.use(
   cors({
-    origin: true,       // har origin ko allow karega (browser origin ko reflect karega)
-    credentials: true,  // cookies / authorization headers bhejne ke liye
+    origin: true,       // sabhi origins allowed
+    credentials: true,  // cookies / authorization allowed
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 
+// ✅ Important: Preflight request handle karo
+app.options("*", cors({
+  origin: true,
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+}));
 app.use(express.urlencoded({ extended: true }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
