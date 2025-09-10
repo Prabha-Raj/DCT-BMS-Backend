@@ -45,7 +45,17 @@ const __dirname = path.dirname(__filename);
 
 // Middlewares
 app.use(express.json());
-app.use(cors());
+// app.use(cors());
+// ✅ Universal CORS setup
+app.use(
+  cors({
+    origin: true,       // har origin ko allow karega (browser origin ko reflect karega)
+    credentials: true,  // cookies / authorization headers bhejne ke liye
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
+
 app.use(express.urlencoded({ extended: true }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
