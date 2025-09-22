@@ -7,10 +7,10 @@ import Seat from "../model/Seat.js"; // Import Seat model if needed
 // Create a new time slot (librarian only)
 export const createTimeSlot = async (req, res) => {
   try {
-    const { startTime, endTime, price, seats } = req.body;
+    const {slotTitle, startTime, endTime, price, seats, slotType } = req.body;
     
     // Validate inputs
-    if (!startTime || !endTime || !price) {
+    if (!slotTitle || !startTime || !endTime || !price || !slotType) {
       return res.status(400).json({ message: "All fields are required" });
     }
     
@@ -31,11 +31,13 @@ export const createTimeSlot = async (req, res) => {
     // Create new time slot
     const timeSlot = new TimeSlot({
       library: library._id, 
+      slotTitle,
       startTime,
       endTime,
       price,
       seats: seats || [], // Initialize seats array
-      isActive: req.body.isActive !== undefined ? req.body.isActive : true
+      isActive: req.body.isActive !== undefined ? req.body.isActive : true,
+      slotType
     });
 
     await timeSlot.save();
@@ -212,9 +214,10 @@ export const getTimeSlotById = async (req, res) => {
 
 // Update a time slot (librarian only)
 export const updateTimeSlot = async (req, res) => {
+  console.log('hii')
   try {
     const { id } = req.params;
-    const { startTime, endTime, price, isActive, seats } = req.body;
+    const {slotTitle, startTime, endTime, price, slotType, isActive, seats } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ message: "Invalid timeslot ID" });
@@ -245,10 +248,11 @@ export const updateTimeSlot = async (req, res) => {
     if (seats && !Array.isArray(seats)) {
       return res.status(400).json({ message: "Seats must be an array" });
     }
-
     // Apply updates
+    if (slotTitle) timeSlot.slotTitle = slotTitle;
     if (startTime) timeSlot.startTime = startTime;
     if (endTime) timeSlot.endTime = endTime;
+    if (slotType) timeSlot.slotType = slotType;
     if (price !== undefined) timeSlot.price = price;
     if (isActive !== undefined) timeSlot.isActive = isActive;
     if (seats) {

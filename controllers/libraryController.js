@@ -1591,3 +1591,213 @@ export const getNearMeLibrariesForMonthlyBookingLatLon = async (req, res) => {
     });
   }
 };
+
+// new
+
+export const getNearestLibrariesForMonthlyBooking = async (req, res) => {
+  let { search = "", libraryType, services } = req.query;
+  let { userLat, userLon } = req.body;
+
+  userLat = parseFloat(userLat);
+  userLon = parseFloat(userLon);
+  const MAX_DISTANCE_KM = 20; // 20km radius
+
+  if (!userLat || !userLon) {
+    return res.status(400).json({
+      success: false,
+      message: "User latitude and longitude are required",
+    });
+  }
+
+  try {
+    // ✅ Base query
+    const query = {
+      isBlocked: false,
+      status: "approved",
+      monthlyFee: { $gt: 0 },
+      coordinates: { $exists: true, $ne: null },
+    };
+
+    if (search) {
+      query.$or = [
+        { libraryName: { $regex: search, $options: "i" } },
+        { description: { $regex: search, $options: "i" } },
+        { pinCode: { $regex: search, $options: "i" } },
+        { location: { $regex: search, $options: "i" } },
+      ];
+    }
+    if (libraryType) query.libraryType = libraryType;
+    if (services)
+      query.services = { $in: Array.isArray(services) ? services : [services] };
+
+    // ✅ Find libraries
+    const libraries = await Library.find(query)
+      .populate("libraryType")
+      .populate("services")
+      .lean();
+
+    if (!libraries.length) {
+      return res.status(200).json({ success: true, data: [] });
+    }
+
+    const libraryIds = libraries.map((lib) => lib._id);
+
+    // ✅ Get seats
+    const monthlySeats = await Seat.find({
+      library: { $in: libraryIds },
+      seatFor: "monthly-booking",
+      isActive: true,
+    }).lean();
+
+    const seatIds = monthlySeats.map((s) => s._id);
+
+    // ✅ Get active bookings
+    const activeBookings = await MonthlyBooking.find({
+      seat: { $in: seatIds },
+      status: { $in: ["confirmed", "pending"] },
+    })
+      .sort({ startDate: 1 })
+      .lean();
+
+    // 🔗 Map bookings by seat
+    const seatBookingsMap = activeBookings.reduce((map, booking) => {
+      const sid = booking.seat.toString();
+      if (!map[sid]) map[sid] = [];
+      map[sid].push({
+        startDate: booking.startDate,
+        endDate: booking.endDate,
+        status: booking.status,
+      });
+      return map;
+    }, {});
+
+    // ✅ Fetch slots linked to seats
+    const slots = await TimeSlot.find({
+      library: { $in: libraryIds },
+      seats: { $in: seatIds },
+      isActive: true,
+      slotType: "monthly-booking",
+    })
+      .select("slotTitle startTime endTime price slotType seats")
+      .lean();
+
+    // 🔗 Map slots by seat
+    const slotMap = {};
+    slots.forEach((slot) => {
+      slot.seats.forEach((seatId) => {
+        const sid = seatId.toString();
+        if (!slotMap[sid]) slotMap[sid] = [];
+        slotMap[sid].push({
+          slotTitle: slot.slotTitle,
+          from: slot.startTime,
+          to: slot.endTime,
+          price: slot.price,
+          slotType: slot.slotType,
+        });
+      });
+    });
+
+    // 🔗 Group seats by library
+    const seatsByLibrary = {};
+    monthlySeats.forEach((seat) => {
+      const bookings = seatBookingsMap[seat._id.toString()] || [];
+
+      const nextAvailableDate =
+        bookings.length > 0
+          ? new Date(
+              Math.max(...bookings.map((b) => new Date(b.endDate).getTime()))
+            )
+          : null;
+
+      const seatWithInfo = {
+        _id: seat._id,
+        seatNumber: seat.seatNumber,
+        isAvailable: bookings.length === 0,
+        bookings: bookings.map((b) => ({
+          from: b.startDate,
+          to: b.endDate,
+          status: b.status,
+        })),
+        nextAvailableDate,
+        availableSlots: slotMap[seat._id.toString()] || [],
+      };
+
+      if (!seatsByLibrary[seat.library.toString()]) {
+        seatsByLibrary[seat.library.toString()] = [];
+      }
+      seatsByLibrary[seat.library.toString()].push(seatWithInfo);
+    });
+
+    // ✅ Enrich libraries
+    const enrichedLibraries = [];
+    for (const library of libraries) {
+      try {
+        let libLat, libLon;
+        const coords = library.coordinates;
+
+        if (coords) {
+          if (typeof coords === "string") {
+            try {
+              const parsed = JSON.parse(coords.replace(/\\"/g, '"'));
+              libLat = parseFloat(parsed.lat);
+              libLon = parseFloat(parsed.lng ?? parsed.lon);
+            } catch {
+              continue;
+            }
+          } else if (typeof coords === "object") {
+            libLat = parseFloat(coords.lat);
+            libLon = parseFloat(coords.lng ?? coords.lon);
+          }
+        }
+
+        if (!libLat || !libLon) continue;
+
+        const distance = findDistanceBetweenLatAndLon(
+          userLat,
+          userLon,
+          libLat,
+          libLon
+        );
+        if (distance > MAX_DISTANCE_KM) continue;
+
+        const librarySeats = seatsByLibrary[library._id.toString()] || [];
+
+        if (librarySeats.length > 0) {
+          const nextAvailableForLibrary =
+            librarySeats
+              .map((s) => s.nextAvailableDate)
+              .filter(Boolean)
+              .sort((a, b) => a - b)[0] || null;
+
+          enrichedLibraries.push({
+            ...library,
+            distanceInKm: Number(distance.toFixed(2)),
+            monthlyFee: library.monthlyFee,
+            seats: librarySeats,
+            availableSeatsCount: librarySeats.filter((s) => s.isAvailable)
+              .length,
+            totalSeatsCount: librarySeats.length,
+            nextAvailableFor: nextAvailableForLibrary,
+          });
+        }
+      } catch (err) {
+        console.warn(
+          `Skipping library [${library.libraryName}] due to error:`,
+          err.message
+        );
+      }
+    }
+
+    // ✅ Sort by nearest first
+    enrichedLibraries.sort((a, b) => a.distanceInKm - b.distanceInKm);
+
+    res.status(200).json({ success: true, data: enrichedLibraries });
+  } catch (error) {
+    console.error("❌ Error in nearest monthly libraries:", error.message);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch monthly booking libraries",
+      error: error.message,
+    });
+  }
+};

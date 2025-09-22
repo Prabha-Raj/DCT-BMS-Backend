@@ -28,6 +28,9 @@ import earningRoutes from "./routes/earningRoutes.js";
 import bankDetailsRoutes from "./routes/bankDetailsRoutes.js";
 import withdrawRequestRoutes from "./routes/withdrawRequestRoutes.js";
 import managePasswordRoutes from "./routes/managePasswordRoutes.js";
+import subdcriptionRoutes from "./routes/subscriptionRoutes.js";
+
+
 
 const app = express();
 dotenv.config();
@@ -89,6 +92,9 @@ app.use("/api/earnings", earningRoutes);
 app.use("/api/bank-details", bankDetailsRoutes);
 app.use("/api/withdraw-requests", withdrawRequestRoutes);
 app.use("/api/password", managePasswordRoutes);
+app.use("/api/subscriptions", subdcriptionRoutes);
+
+
 
 app.get("/", (req, res) => {
   res.send("Backend of BookMySpace is running now...");

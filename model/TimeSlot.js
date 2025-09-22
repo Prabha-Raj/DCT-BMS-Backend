@@ -7,12 +7,16 @@ const TimeSlotSchema = new mongoose.Schema(
       ref:"Library",
       required:true
     },
-    
+   
     seats:[{
       type: mongoose.Schema.Types.ObjectId,
       ref:"Seat",
       default:null
     }],
+
+    slotTitle:{
+      type:String
+    },
 
     startTime: {
       type: String,
@@ -24,6 +28,7 @@ const TimeSlotSchema = new mongoose.Schema(
         message: props => `${props.value} is not a valid time format (HH:MM)`
       }
     },
+
     endTime: {
       type: String,
       required: true,
@@ -34,6 +39,7 @@ const TimeSlotSchema = new mongoose.Schema(
         message: props => `${props.value} is not a valid time format (HH:MM)`
       }
     },
+
     price: {
       type: String,
       required: true
@@ -41,6 +47,11 @@ const TimeSlotSchema = new mongoose.Schema(
     isActive: {
       type: Boolean,
       default: true
+    },
+    slotType:{
+      type:String,
+      enum:["daily-booking", "monthly-booking"],
+      default:"daily-booking"
     }
   },
   { timestamps: true }

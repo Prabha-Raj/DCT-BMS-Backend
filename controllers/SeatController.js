@@ -154,7 +154,7 @@ export const getSeatById = async (req, res) => {
 export const getSeatDetails = async (req, res) => {
   try {
     const { id } = req.params;
-    const { date } = req.query; // Optional date filter
+    const { date } = req.query; 
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ message: "Invalid seat ID" });
@@ -168,7 +168,6 @@ export const getSeatDetails = async (req, res) => {
 
     // Find all time slots associated with this seat (include seats array)
     const timeSlots = await TimeSlot.find({ seats: id })
-      .select('startTime endTime price isActive seats')
       .sort({ startTime: 1 })
       .lean();
 
@@ -192,7 +191,7 @@ export const getSeatDetails = async (req, res) => {
     // Get all bookings for this seat in one query
     const allBookings = await Booking.find(bookingQuery)
       .populate('user', 'name email')
-      .populate('timeSlot', 'startTime endTime price')
+      .populate('timeSlot')
       .sort({ bookingDate: 1, 'timeSlot.startTime': 1 })
       .lean();
 
@@ -205,11 +204,13 @@ export const getSeatDetails = async (req, res) => {
       return {
         timeSlot: {
           _id: timeSlot._id,
+          slotTitle:timeSlot.slotTitle,
           startTime: timeSlot.startTime,
           endTime: timeSlot.endTime,
+          slotType: timeSlot.slotType,
           price: timeSlot.price,
           isActive: timeSlot.isActive,
-          available: !bookings.some(b => b.status === 'confirmed') // Check if slot is available
+          available: !bookings.some(b => b.status === 'confirmed')
         },
         bookings: bookings.map(booking => ({
           _id: booking._id,
@@ -234,6 +235,7 @@ export const getSeatDetails = async (req, res) => {
         _id: seat._id,
         seatNumber: seat.seatNumber,
         seatName: seat.seatName,
+        seatFor: seat.seatFor,
         isActive: seat.isActive,
         library: seat.library
       },
@@ -381,6 +383,7 @@ export const getSeatsByLibrary = async (req, res) => {
 };
 
 export const addTimeSlotsForASeat = async (req, res) => {
+  console.log("lllllll")
   try {
     const { id: seatId } = req.params;
     const { libraryId, timeSlots } = req.body;

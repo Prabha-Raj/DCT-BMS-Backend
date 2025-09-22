@@ -7,6 +7,11 @@ const MonthlyBookingSchema = new mongoose.Schema(
       ref: "User",
       required: true
     },
+    timeSlot: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "TimeSlot",
+      required: true
+    },
     seat: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Seat",
@@ -43,11 +48,11 @@ const MonthlyBookingSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Transaction"
     },
-bookedAt: {
-  type: Date,
-  default: Date.now,
-  required: true
-}
+    bookedAt: {
+      type: Date,
+      default: Date.now,
+      required: true
+    }
 
   },
   { timestamps: true }
