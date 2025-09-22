@@ -1908,6 +1908,7 @@ export const newGetAllLibrariesForMonthlyBooking = async (req, res) => {
       const seatWithInfo = {
         _id: seat._id,
         seatNumber: seat.seatNumber,
+        seatFor:seat.seatFor,
         isAvailable: bookings.length === 0,
         bookings: bookings.map((b) => ({
           from: b.startDate,
