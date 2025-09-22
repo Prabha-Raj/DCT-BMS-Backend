@@ -217,6 +217,7 @@ export const getMyMonthlyBookings = async (req, res) => {
             .populate('seat')
             .populate('library')
             .populate('paymentId')
+            .populate('timeSlot')
             .sort({ bookingDate: -1 })
 
         res.status(200).json({
@@ -344,46 +345,6 @@ export const cancelMonthlyBooking = async (req, res) => {
 };
 
 
-// Get user's monthly bookings
-// export const getMonthlyBookingsForLibrarian = async (req, res) => {
-//     try {
-//         const user = req.user._id;
-//         console.log(user)
-//         const { status, } = req.query;
-
-//         const library = await Library.findOne({ librarian: user })
-//         if (!library) {
-//             return res.status(404).json({
-//                 success: false,
-//                 message: "Your library not found"
-//             })
-//         }
-
-//         const filter = { library: library._id };
-//         if (status) filter.status = status;
-
-//         const bookings = await MonthlyBooking.find(filter)
-//             .populate('seat')
-//             .populate('library')
-//             .populate('paymentId')
-//             .sort({ bookingDate: -1 })
-
-//         res.status(200).json({
-//             success: true,
-//             message: "These are your monthly bookings",
-//             bookings
-//         });
-
-//     } catch (error) {
-//         console.error("Error fetching monthly bookings:", error);
-//         res.status(500).json({
-//             success: false,
-//             message: "Failed to fetch monthly bookings"
-//         });
-//     }
-// };
-
-
 export const getMonthlyBookingsForLibrarian = async (req, res) => {
   try {
     const user = req.user._id;
@@ -432,6 +393,7 @@ export const getMonthlyBookingsForLibrarian = async (req, res) => {
       .populate("seat")
       .populate("library")
       .populate("paymentId")
+      .populate("timeSlot")
       .populate("user", "name email")
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -581,6 +543,7 @@ export const getMonthlyBookingsForAdmin = async (req, res) => {
         path: 'paymentId',
         select: 'amount type status createdAt'
       })
+      .populate("timeSlot")
       .sort({ bookedAt: -1, createdAt: -1 })
       .skip(parseInt(skip))
       .limit(parseInt(limit));
