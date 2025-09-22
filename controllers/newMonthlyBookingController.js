@@ -11,7 +11,7 @@ import TimeSlot from "../model/TimeSlot.js";
 const checkMonthlyBookingConflicts = async (slotId, seatId, startDate, endDate, session) => {
   const existingBookings = await MonthlyBooking.find({
     seat: seatId,
-    timeSlot:slotId,
+    timeSlot: slotId,
     $or: [
       { startDate: { $lte: endDate }, endDate: { $gte: startDate } }
     ],
@@ -42,20 +42,28 @@ export const newCreateMonthlyBooking = async (req, res) => {
           Seat.findById(seat).session(session),
           Library.findById(library).session(session),
           User.findById(userId).session(session),
-          Wallet.findOne({ user: userId }).session(session)
+          Wallet.findOne({ user: userId }).session(session),
         ]);
 
         // 3. Validate resources
-        if (!slotData || !seatData || !libraryData || !user || !wallet) {
-          const missingResource = !slotData ? "slot" : !seatData ? "Seat" :
-            !libraryData ? "Library" :
-              !user ? "User" : "Wallet";
-          throw {
-            statusCode: 404,
-            message: `${missingResource} not found`,
-            isOperational: true
-          };
+        const resources = {
+          slot: slotData,
+          seat: seatData,
+          library: libraryData,
+          user,
+          wallet,
+        };
+
+        for (const [key, value] of Object.entries(resources)) {
+          if (!value) {
+            throw {
+              statusCode: 404,
+              message: `${key.charAt(0).toUpperCase() + key.slice(1)} not found`,
+              isOperational: true,
+            };
+          }
         }
+
 
         if (!slotData.isActive) throw { statusCode: 400, message: "Time slot is not active" };
 
@@ -149,7 +157,7 @@ export const newCreateMonthlyBooking = async (req, res) => {
 
         const monthlyBooking = new MonthlyBooking({
           user: userId,
-          timeSlot:slot,
+          timeSlot: slot,
           seat,
           library,
           startDate,
