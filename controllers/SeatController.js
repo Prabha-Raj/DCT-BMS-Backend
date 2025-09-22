@@ -383,7 +383,8 @@ export const getSeatsByLibrary = async (req, res) => {
 };
 
 export const addTimeSlotsForASeat = async (req, res) => {
-  console.log("lllllll")
+  console.log("lllllll", req.body)
+
   try {
     const { id: seatId } = req.params;
     const { libraryId, timeSlots } = req.body;
@@ -435,6 +436,8 @@ export const addTimeSlotsForASeat = async (req, res) => {
           // Create new time slot
           const newTimeSlot = new TimeSlot({
             library: libraryId,
+            slotTitle:slot.slotTitle,
+            slotType:slot.slotType,
             seats: [seatId],
             startTime: slot.startTime,
             endTime: slot.endTime,
