@@ -24,7 +24,7 @@ const checkMonthlyBookingConflicts = async (slotId, seatId, startDate, endDate, 
 export const newCreateMonthlyBooking = async (req, res) => {
   const session = await mongoose.startSession();
   let transactionInProgress = true;
-
+  console.log("req", req.body)
   try {
     await session.withTransaction(async () => {
       try {
