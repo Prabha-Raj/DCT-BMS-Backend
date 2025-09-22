@@ -1889,6 +1889,8 @@ export const newGetAllLibrariesForMonthlyBooking = async (req, res) => {
           to: slot.endTime,
           price: slot.price,
           slotType: slot.slotType,
+          _id:slot._id,
+          isActive:slot.isActive
         });
       });
     });
