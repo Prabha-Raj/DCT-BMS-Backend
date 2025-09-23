@@ -30,7 +30,7 @@ export const newCreateMonthlyBooking = async (req, res) => {
       try {
         // 1. Input validation
         const { slot, seat, library, from } = req.body;
-        const userId = req.user._id;
+        const {userId} = req.params;
 
         if (!slot || !seat || !library) {
           throw { statusCode: 400, message: "Seat and library IDs are required", isOperational: true };
@@ -241,7 +241,7 @@ export const newCreateMonthlyBooking = async (req, res) => {
 // Get user's monthly bookings
 export const getMyMonthlyBookings = async (req, res) => {
   try {
-    const userId = req.user._id;
+    const userId = req.params;
     const { status, } = req.query;
 
     const filter = { user: userId };

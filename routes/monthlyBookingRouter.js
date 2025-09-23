@@ -11,13 +11,13 @@ import { newCreateMonthlyBooking } from '../controllers/newMonthlyBookingControl
 
 const router = express.Router();
 
-router.use(protect)
+router.use()
 
-router.post('/', studentOnly, createMonthlyBooking);
-router.post('/create', studentOnly, newCreateMonthlyBooking);
-router.get('/', adminOnly, getMonthlyBookingsForAdmin);
-router.get('/student/my-booking', studentOnly, getMyMonthlyBookings);
-router.get('/librarian/my-booking', librarianOnly, getMonthlyBookingsForLibrarian);
-router.patch('/:bookingId/cancel', studentOnly, cancelMonthlyBooking);
+router.post('/',protect, studentOnly, createMonthlyBooking);
+router.post('/create/:userId', newCreateMonthlyBooking);
+router.get('/',protect, adminOnly, getMonthlyBookingsForAdmin);
+router.get('/student/my-booking',protect, studentOnly, getMyMonthlyBookings);
+router.get('/librarian/my-booking',protect, librarianOnly, getMonthlyBookingsForLibrarian);
+router.patch('/:bookingId/cancel',protect, studentOnly, cancelMonthlyBooking);
 
 export default router;
