@@ -29,9 +29,8 @@ export const newCreateMonthlyBooking = async (req, res) => {
     await session.withTransaction(async () => {
       try {
         // 1. Input validation
-        const { slot, seat, library, from } = req.body;
-        const {userId} = req.params;
-
+        const { userId, slot, seat, library, from } = req.body;
+        
         if (!slot || !seat || !library) {
           throw { statusCode: 400, message: "Seat and library IDs are required", isOperational: true };
         }

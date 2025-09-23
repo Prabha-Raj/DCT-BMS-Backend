@@ -14,7 +14,7 @@ const router = express.Router();
 router.use()
 
 router.post('/',protect, studentOnly, createMonthlyBooking);
-router.post('/create/:userId', newCreateMonthlyBooking);
+router.post('/create', newCreateMonthlyBooking);
 router.get('/',protect, adminOnly, getMonthlyBookingsForAdmin);
 router.get('/student/my-booking',protect, studentOnly, getMyMonthlyBookings);
 router.get('/librarian/my-booking',protect, librarianOnly, getMonthlyBookingsForLibrarian);
