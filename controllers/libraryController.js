@@ -1594,6 +1594,372 @@ export const getNearMeLibrariesForMonthlyBookingLatLon = async (req, res) => {
 
 // new
 
+// export const getNearestLibrariesForMonthlyBooking = async (req, res) => {
+//   let { search = "", libraryType, services } = req.query;
+//   let { userLat, userLon } = req.body;
+
+//   userLat = parseFloat(userLat);
+//   userLon = parseFloat(userLon);
+//   const MAX_DISTANCE_KM = 20; // 20km radius
+
+//   if (!userLat || !userLon) {
+//     return res.status(400).json({
+//       success: false,
+//       message: "User latitude and longitude are required",
+//     });
+//   }
+
+//   try {
+//     //  Base query
+//     const query = {
+//       isBlocked: false,
+//       status: "approved",
+//       monthlyFee: { $gt: 0 },
+//       coordinates: { $exists: true, $ne: null },
+//     };
+
+//     if (search) {
+//       query.$or = [
+//         { libraryName: { $regex: search, $options: "i" } },
+//         { description: { $regex: search, $options: "i" } },
+//         { pinCode: { $regex: search, $options: "i" } },
+//         { location: { $regex: search, $options: "i" } },
+//       ];
+//     }
+//     if (libraryType) query.libraryType = libraryType;
+//     if (services)
+//       query.services = { $in: Array.isArray(services) ? services : [services] };
+
+//     //  Find libraries
+//     const libraries = await Library.find(query)
+//       .populate("libraryType")
+//       .populate("services")
+//       .lean();
+
+//     if (!libraries.length) {
+//       return res.status(200).json({ success: true, data: [] });
+//     }
+
+//     const libraryIds = libraries.map((lib) => lib._id);
+
+//     //  Get seats
+//     const monthlySeats = await Seat.find({
+//       library: { $in: libraryIds },
+//       seatFor: "monthly-booking",
+//       isActive: true,
+//     }).lean();
+
+//     const seatIds = monthlySeats.map((s) => s._id);
+
+//     //  Get active bookings
+//     const activeBookings = await MonthlyBooking.find({
+//       seat: { $in: seatIds },
+//       status: { $in: ["confirmed", "pending"] },
+//     })
+//       .sort({ startDate: 1 })
+//       .lean();
+
+//     // 🔗 Map bookings by seat
+//     const seatBookingsMap = activeBookings.reduce((map, booking) => {
+//       const sid = booking.seat.toString();
+//       if (!map[sid]) map[sid] = [];
+//       map[sid].push({
+//         startDate: booking.startDate,
+//         endDate: booking.endDate,
+//         status: booking.status,
+//       });
+//       return map;
+//     }, {});
+
+//     //  Fetch slots linked to seats
+//     const slots = await TimeSlot.find({
+//       library: { $in: libraryIds },
+//       seats: { $in: seatIds },
+//       isActive: true,
+//       slotType: "monthly-booking",
+//     })
+//       .select("slotTitle startTime endTime price slotType seats")
+//       .lean();
+
+//     // 🔗 Map slots by seat
+//     const slotMap = {};
+//     slots.forEach((slot) => {
+//       slot.seats.forEach((seatId) => {
+//         const sid = seatId.toString();
+//         if (!slotMap[sid]) slotMap[sid] = [];
+//         slotMap[sid].push({
+//           slotTitle: slot.slotTitle,
+//           from: slot.startTime,
+//           to: slot.endTime,
+//           price: slot.price,
+//           slotType: slot.slotType,
+//         });
+//       });
+//     });
+
+//     // 🔗 Group seats by library
+//     const seatsByLibrary = {};
+//     monthlySeats.forEach((seat) => {
+//       const bookings = seatBookingsMap[seat._id.toString()] || [];
+
+//       const nextAvailableDate =
+//         bookings.length > 0
+//           ? new Date(
+//               Math.max(...bookings.map((b) => new Date(b.endDate).getTime()))
+//             )
+//           : null;
+
+//       const seatWithInfo = {
+//         _id: seat._id,
+//         seatNumber: seat.seatNumber,
+//         isAvailable: bookings.length === 0,
+//         bookings: bookings.map((b) => ({
+//           from: b.startDate,
+//           to: b.endDate,
+//           status: b.status,
+//         })),
+//         nextAvailableDate,
+//         availableSlots: slotMap[seat._id.toString()] || [],
+//       };
+
+//       if (!seatsByLibrary[seat.library.toString()]) {
+//         seatsByLibrary[seat.library.toString()] = [];
+//       }
+//       seatsByLibrary[seat.library.toString()].push(seatWithInfo);
+//     });
+
+//     //  Enrich libraries
+//     const enrichedLibraries = [];
+//     for (const library of libraries) {
+//       try {
+//         let libLat, libLon;
+//         const coords = library.coordinates;
+
+//         if (coords) {
+//           if (typeof coords === "string") {
+//             try {
+//               const parsed = JSON.parse(coords.replace(/\\"/g, '"'));
+//               libLat = parseFloat(parsed.lat);
+//               libLon = parseFloat(parsed.lng ?? parsed.lon);
+//             } catch {
+//               continue;
+//             }
+//           } else if (typeof coords === "object") {
+//             libLat = parseFloat(coords.lat);
+//             libLon = parseFloat(coords.lng ?? coords.lon);
+//           }
+//         }
+
+//         if (!libLat || !libLon) continue;
+
+//         const distance = findDistanceBetweenLatAndLon(
+//           userLat,
+//           userLon,
+//           libLat,
+//           libLon
+//         );
+//         if (distance > MAX_DISTANCE_KM) continue;
+
+//         const librarySeats = seatsByLibrary[library._id.toString()] || [];
+
+//         if (librarySeats.length > 0) {
+//           const nextAvailableForLibrary =
+//             librarySeats
+//               .map((s) => s.nextAvailableDate)
+//               .filter(Boolean)
+//               .sort((a, b) => a - b)[0] || null;
+
+//           enrichedLibraries.push({
+//             ...library,
+//             distanceInKm: Number(distance.toFixed(2)),
+//             monthlyFee: library.monthlyFee,
+//             seats: librarySeats,
+//             availableSeatsCount: librarySeats.filter((s) => s.isAvailable)
+//               .length,
+//             totalSeatsCount: librarySeats.length,
+//             nextAvailableFor: nextAvailableForLibrary,
+//           });
+//         }
+//       } catch (err) {
+//         console.warn(
+//           `Skipping library [${library.libraryName}] due to error:`,
+//           err.message
+//         );
+//       }
+//     }
+
+//     //  Sort by nearest first
+//     enrichedLibraries.sort((a, b) => a.distanceInKm - b.distanceInKm);
+
+//     res.status(200).json({ success: true, data: enrichedLibraries });
+//   } catch (error) {
+//     console.error("❌ Error in nearest monthly libraries:", error.message);
+//     res.status(500).json({
+//       success: false,
+//       message: "Failed to fetch monthly booking libraries",
+//       error: error.message,
+//     });
+//   }
+// };
+
+// export const newGetAllLibrariesForMonthlyBooking = async (req, res) => {
+//   try {
+//     let { search = "", libraryType, services } = req.query;
+
+//     //  Base query
+//     const query = {
+//       isBlocked: false,
+//       status: "approved",
+//       monthlyFee: { $gt: 0 },
+//       coordinates: { $exists: true, $ne: null },
+//     };
+
+//     if (search) {
+//       query.$or = [
+//         { libraryName: { $regex: search, $options: "i" } },
+//         { description: { $regex: search, $options: "i" } },
+//         { pinCode: { $regex: search, $options: "i" } },
+//         { location: { $regex: search, $options: "i" } },
+//       ];
+//     }
+//     if (libraryType) query.libraryType = libraryType;
+//     if (services)
+//       query.services = { $in: Array.isArray(services) ? services : [services] };
+
+//     //  Find libraries
+//     const libraries = await Library.find(query)
+//       .populate("libraryType")
+//       .populate("services")
+//       .lean();
+
+//     if (!libraries.length) {
+//       return res.status(200).json({ success: true, data: [] });
+//     }
+
+//     const libraryIds = libraries.map((lib) => lib._id);
+
+//     //  Get seats
+//     const monthlySeats = await Seat.find({
+//       library: { $in: libraryIds },
+//       seatFor: "monthly-booking",
+//       isActive: true,
+//     }).lean();
+
+//     const seatIds = monthlySeats.map((s) => s._id);
+
+//     //  Get active bookings
+//     const activeBookings = await MonthlyBooking.find({
+//       seat: { $in: seatIds },
+//       status: { $in: ["confirmed", "pending"] },
+//     })
+//       .sort({ startDate: 1 })
+//       .lean();
+
+//     // 🔗 Map bookings by seat
+//     const seatBookingsMap = activeBookings.reduce((map, booking) => {
+//       const sid = booking.seat.toString();
+//       if (!map[sid]) map[sid] = [];
+//       map[sid].push({
+//         startDate: booking.startDate,
+//         endDate: booking.endDate,
+//         status: booking.status,
+//       });
+//       return map;
+//     }, {});
+
+//     //  Fetch slots linked to seats
+//     const slots = await TimeSlot.find({
+//       library: { $in: libraryIds },
+//       seats: { $in: seatIds },
+//       isActive: true,
+//       slotType: "monthly-booking",
+//     })
+//       .select("slotTitle startTime endTime price slotType seats")
+//       .lean();
+
+//     // 🔗 Map slots by seat
+//     const slotMap = {};
+//     slots.forEach((slot) => {
+//       slot.seats.forEach((seatId) => {
+//         const sid = seatId.toString();
+//         if (!slotMap[sid]) slotMap[sid] = [];
+//         slotMap[sid].push({
+//           slotTitle: slot.slotTitle,
+//           from: slot.startTime,
+//           to: slot.endTime,
+//           price: slot.price,
+//           slotType: slot.slotType,
+//           _id:slot._id,
+//           isActive:slot.isActive
+//         });
+//       });
+//     });
+
+//     // 🔗 Group seats by library
+//     const seatsByLibrary = {};
+//     monthlySeats.forEach((seat) => {
+//       const bookings = seatBookingsMap[seat._id.toString()] || [];
+
+//       const nextAvailableDate =
+//         bookings.length > 0
+//           ? new Date(
+//               Math.max(...bookings.map((b) => new Date(b.endDate).getTime()))
+//             )
+//           : null;
+
+//       const seatWithInfo = {
+//         _id: seat._id,
+//         seatNumber: seat.seatNumber,
+//         seatFor:seat.seatFor,
+//         isAvailable: bookings.length === 0,
+//         bookings: bookings.map((b) => ({
+//           from: b.startDate,
+//           to: b.endDate,
+//           status: b.status,
+//         })),
+//         nextAvailableDate,
+//         availableSlots: slotMap[seat._id.toString()] || [],
+//       };
+
+//       if (!seatsByLibrary[seat.library.toString()]) {
+//         seatsByLibrary[seat.library.toString()] = [];
+//       }
+//       seatsByLibrary[seat.library.toString()].push(seatWithInfo);
+//     });
+
+//     //  Enrich libraries
+//     const enrichedLibraries = libraries.map((library) => {
+//       const librarySeats = seatsByLibrary[library._id.toString()] || [];
+
+//       if (!librarySeats.length) return null;
+
+//       const nextAvailableForLibrary =
+//         librarySeats
+//           .map((s) => s.nextAvailableDate)
+//           .filter(Boolean)
+//           .sort((a, b) => a - b)[0] || null;
+
+//       return {
+//         ...library,
+//         monthlyFee: library.monthlyFee,
+//         seats: librarySeats,
+//         availableSeatsCount: librarySeats.filter((s) => s.isAvailable).length,
+//         totalSeatsCount: librarySeats.length,
+//         nextAvailableFor: nextAvailableForLibrary,
+//       };
+//     }).filter(Boolean);
+
+//     res.status(200).json({ success: true, data: enrichedLibraries });
+//   } catch (error) {
+//     console.error("❌ Error in all monthly libraries:", error.message);
+//     res.status(500).json({
+//       success: false,
+//       message: "Failed to fetch monthly booking libraries",
+//       error: error.message,
+//     });
+//   }
+// };
+
 export const getNearestLibrariesForMonthlyBooking = async (req, res) => {
   let { search = "", libraryType, services } = req.query;
   let { userLat, userLon } = req.body;
@@ -1610,7 +1976,7 @@ export const getNearestLibrariesForMonthlyBooking = async (req, res) => {
   }
 
   try {
-    // ✅ Base query
+    //  Base query
     const query = {
       isBlocked: false,
       status: "approved",
@@ -1630,7 +1996,7 @@ export const getNearestLibrariesForMonthlyBooking = async (req, res) => {
     if (services)
       query.services = { $in: Array.isArray(services) ? services : [services] };
 
-    // ✅ Find libraries
+    //  Find libraries
     const libraries = await Library.find(query)
       .populate("libraryType")
       .populate("services")
@@ -1642,7 +2008,7 @@ export const getNearestLibrariesForMonthlyBooking = async (req, res) => {
 
     const libraryIds = libraries.map((lib) => lib._id);
 
-    // ✅ Get seats
+    //  Get seats
     const monthlySeats = await Seat.find({
       library: { $in: libraryIds },
       seatFor: "monthly-booking",
@@ -1651,19 +2017,29 @@ export const getNearestLibrariesForMonthlyBooking = async (req, res) => {
 
     const seatIds = monthlySeats.map((s) => s._id);
 
-    // ✅ Get active bookings
+    //  Fetch slots linked to seats
+    const slots = await TimeSlot.find({
+      library: { $in: libraryIds },
+      seats: { $in: seatIds },
+      isActive: true,
+      slotType: "monthly-booking",
+    })
+      .select("slotTitle startTime endTime price slotType seats _id isActive")
+      .lean();
+
+    //  Get active bookings for slots to check slot-level availability
     const activeBookings = await MonthlyBooking.find({
-      seat: { $in: seatIds },
+      timeSlot: { $in: slots.map(s => s._id) },
       status: { $in: ["confirmed", "pending"] },
     })
       .sort({ startDate: 1 })
       .lean();
 
-    // 🔗 Map bookings by seat
-    const seatBookingsMap = activeBookings.reduce((map, booking) => {
-      const sid = booking.seat.toString();
-      if (!map[sid]) map[sid] = [];
-      map[sid].push({
+    // 🔗 Map bookings by slot
+    const slotBookingsMap = activeBookings.reduce((map, booking) => {
+      const slotId = booking.timeSlot.toString();
+      if (!map[slotId]) map[slotId] = [];
+      map[slotId].push({
         startDate: booking.startDate,
         endDate: booking.endDate,
         status: booking.status,
@@ -1671,55 +2047,54 @@ export const getNearestLibrariesForMonthlyBooking = async (req, res) => {
       return map;
     }, {});
 
-    // ✅ Fetch slots linked to seats
-    const slots = await TimeSlot.find({
-      library: { $in: libraryIds },
-      seats: { $in: seatIds },
-      isActive: true,
-      slotType: "monthly-booking",
-    })
-      .select("slotTitle startTime endTime price slotType seats")
-      .lean();
-
-    // 🔗 Map slots by seat
+    // 🔗 Map slots by seat and enrich with availability
     const slotMap = {};
+
     slots.forEach((slot) => {
+      // Calculate slot-level availability
+      const slotBookings = slotBookingsMap[slot._id.toString()] || [];
+      const isSlotAvailable = slotBookings.length === 0;
+      const slotNextAvailableDate = slotBookings.length > 0
+        ? new Date(Math.max(...slotBookings.map(b => new Date(b.endDate).getTime())))
+        : null;
+
+      const enrichedSlot = {
+        slotTitle: slot.slotTitle,
+        from: slot.startTime,
+        to: slot.endTime,
+        price: slot.price,
+        slotType: slot.slotType,
+        _id: slot._id,
+        isActive: slot.isActive,
+        isAvailable: isSlotAvailable, // Slot-level availability
+        nextAvailableDate: slotNextAvailableDate, // Slot-level next available
+        bookings: slotBookings.map(b => ({
+          from: b.startDate,
+          to: b.endDate,
+          status: b.status,
+        })),
+      };
+
+      // Map slots to seats
       slot.seats.forEach((seatId) => {
         const sid = seatId.toString();
         if (!slotMap[sid]) slotMap[sid] = [];
-        slotMap[sid].push({
-          slotTitle: slot.slotTitle,
-          from: slot.startTime,
-          to: slot.endTime,
-          price: slot.price,
-          slotType: slot.slotType,
-        });
+        slotMap[sid].push(enrichedSlot);
       });
     });
 
     // 🔗 Group seats by library
     const seatsByLibrary = {};
     monthlySeats.forEach((seat) => {
-      const bookings = seatBookingsMap[seat._id.toString()] || [];
-
-      const nextAvailableDate =
-        bookings.length > 0
-          ? new Date(
-              Math.max(...bookings.map((b) => new Date(b.endDate).getTime()))
-            )
-          : null;
+      // Get available slots for this seat with their individual availability
+      const availableSlots = slotMap[seat._id.toString()] || [];
 
       const seatWithInfo = {
         _id: seat._id,
         seatNumber: seat.seatNumber,
-        isAvailable: bookings.length === 0,
-        bookings: bookings.map((b) => ({
-          from: b.startDate,
-          to: b.endDate,
-          status: b.status,
-        })),
-        nextAvailableDate,
-        availableSlots: slotMap[seat._id.toString()] || [],
+        seatFor: seat.seatFor,
+        // Seat-level availability removed - only slot-level availability matters
+        availableSlots: availableSlots, // Slots with their individual availability
       };
 
       if (!seatsByLibrary[seat.library.toString()]) {
@@ -1728,7 +2103,7 @@ export const getNearestLibrariesForMonthlyBooking = async (req, res) => {
       seatsByLibrary[seat.library.toString()].push(seatWithInfo);
     });
 
-    // ✅ Enrich libraries
+    //  Enrich libraries
     const enrichedLibraries = [];
     for (const library of libraries) {
       try {
@@ -1763,20 +2138,24 @@ export const getNearestLibrariesForMonthlyBooking = async (req, res) => {
         const librarySeats = seatsByLibrary[library._id.toString()] || [];
 
         if (librarySeats.length > 0) {
-          const nextAvailableForLibrary =
-            librarySeats
-              .map((s) => s.nextAvailableDate)
-              .filter(Boolean)
-              .sort((a, b) => a - b)[0] || null;
+          // Calculate library-level statistics based on slots
+          const allSlots = librarySeats.flatMap(seat => seat.availableSlots);
+          const availableSlotsCount = allSlots.filter(slot => slot.isAvailable).length;
+          const totalSlotsCount = allSlots.length;
+          
+          // Calculate next available date from all slots
+          const nextAvailableForLibrary = allSlots
+            .map(slot => slot.nextAvailableDate)
+            .filter(Boolean)
+            .sort((a, b) => a - b)[0] || null;
 
           enrichedLibraries.push({
             ...library,
             distanceInKm: Number(distance.toFixed(2)),
             monthlyFee: library.monthlyFee,
             seats: librarySeats,
-            availableSeatsCount: librarySeats.filter((s) => s.isAvailable)
-              .length,
-            totalSeatsCount: librarySeats.length,
+            availableSlotsCount: availableSlotsCount,
+            totalSlotsCount: totalSlotsCount,
             nextAvailableFor: nextAvailableForLibrary,
           });
         }
@@ -1788,7 +2167,7 @@ export const getNearestLibrariesForMonthlyBooking = async (req, res) => {
       }
     }
 
-    // ✅ Sort by nearest first
+    //  Sort by nearest first
     enrichedLibraries.sort((a, b) => a.distanceInKm - b.distanceInKm);
 
     res.status(200).json({ success: true, data: enrichedLibraries });
@@ -1806,7 +2185,7 @@ export const newGetAllLibrariesForMonthlyBooking = async (req, res) => {
   try {
     let { search = "", libraryType, services } = req.query;
 
-    // ✅ Base query
+    //  Base query
     const query = {
       isBlocked: false,
       status: "approved",
@@ -1826,7 +2205,7 @@ export const newGetAllLibrariesForMonthlyBooking = async (req, res) => {
     if (services)
       query.services = { $in: Array.isArray(services) ? services : [services] };
 
-    // ✅ Find libraries
+    //  Find libraries
     const libraries = await Library.find(query)
       .populate("libraryType")
       .populate("services")
@@ -1838,7 +2217,7 @@ export const newGetAllLibrariesForMonthlyBooking = async (req, res) => {
 
     const libraryIds = libraries.map((lib) => lib._id);
 
-    // ✅ Get seats
+    //  Get seats
     const monthlySeats = await Seat.find({
       library: { $in: libraryIds },
       seatFor: "monthly-booking",
@@ -1847,19 +2226,29 @@ export const newGetAllLibrariesForMonthlyBooking = async (req, res) => {
 
     const seatIds = monthlySeats.map((s) => s._id);
 
-    // ✅ Get active bookings
+    //  Fetch slots linked to seats
+    const slots = await TimeSlot.find({
+      library: { $in: libraryIds },
+      seats: { $in: seatIds },
+      isActive: true,
+      slotType: "monthly-booking",
+    })
+      .select("slotTitle startTime endTime price slotType seats _id isActive")
+      .lean();
+
+    //  Get active bookings for slots to check slot-level availability
     const activeBookings = await MonthlyBooking.find({
-      seat: { $in: seatIds },
+      timeSlot: { $in: slots.map(s => s._id) },
       status: { $in: ["confirmed", "pending"] },
     })
       .sort({ startDate: 1 })
       .lean();
 
-    // 🔗 Map bookings by seat
-    const seatBookingsMap = activeBookings.reduce((map, booking) => {
-      const sid = booking.seat.toString();
-      if (!map[sid]) map[sid] = [];
-      map[sid].push({
+    // 🔗 Map bookings by slot
+    const slotBookingsMap = activeBookings.reduce((map, booking) => {
+      const slotId = booking.timeSlot.toString();
+      if (!map[slotId]) map[slotId] = [];
+      map[slotId].push({
         startDate: booking.startDate,
         endDate: booking.endDate,
         status: booking.status,
@@ -1867,58 +2256,54 @@ export const newGetAllLibrariesForMonthlyBooking = async (req, res) => {
       return map;
     }, {});
 
-    // ✅ Fetch slots linked to seats
-    const slots = await TimeSlot.find({
-      library: { $in: libraryIds },
-      seats: { $in: seatIds },
-      isActive: true,
-      slotType: "monthly-booking",
-    })
-      .select("slotTitle startTime endTime price slotType seats")
-      .lean();
-
-    // 🔗 Map slots by seat
+    // 🔗 Map slots by seat and enrich with availability
     const slotMap = {};
+
     slots.forEach((slot) => {
+      // Calculate slot-level availability
+      const slotBookings = slotBookingsMap[slot._id.toString()] || [];
+      const isSlotAvailable = slotBookings.length === 0;
+      const slotNextAvailableDate = slotBookings.length > 0
+        ? new Date(Math.max(...slotBookings.map(b => new Date(b.endDate).getTime())))
+        : null;
+
+      const enrichedSlot = {
+        slotTitle: slot.slotTitle,
+        from: slot.startTime,
+        to: slot.endTime,
+        price: slot.price,
+        slotType: slot.slotType,
+        _id: slot._id,
+        isActive: slot.isActive,
+        isAvailable: isSlotAvailable, // Slot-level availability
+        nextAvailableDate: slotNextAvailableDate, // Slot-level next available
+        bookings: slotBookings.map(b => ({
+          from: b.startDate,
+          to: b.endDate,
+          status: b.status,
+        })),
+      };
+
+      // Map slots to seats
       slot.seats.forEach((seatId) => {
         const sid = seatId.toString();
         if (!slotMap[sid]) slotMap[sid] = [];
-        slotMap[sid].push({
-          slotTitle: slot.slotTitle,
-          from: slot.startTime,
-          to: slot.endTime,
-          price: slot.price,
-          slotType: slot.slotType,
-          _id:slot._id,
-          isActive:slot.isActive
-        });
+        slotMap[sid].push(enrichedSlot);
       });
     });
 
     // 🔗 Group seats by library
     const seatsByLibrary = {};
     monthlySeats.forEach((seat) => {
-      const bookings = seatBookingsMap[seat._id.toString()] || [];
-
-      const nextAvailableDate =
-        bookings.length > 0
-          ? new Date(
-              Math.max(...bookings.map((b) => new Date(b.endDate).getTime()))
-            )
-          : null;
+      // Get available slots for this seat with their individual availability
+      const availableSlots = slotMap[seat._id.toString()] || [];
 
       const seatWithInfo = {
         _id: seat._id,
         seatNumber: seat.seatNumber,
-        seatFor:seat.seatFor,
-        isAvailable: bookings.length === 0,
-        bookings: bookings.map((b) => ({
-          from: b.startDate,
-          to: b.endDate,
-          status: b.status,
-        })),
-        nextAvailableDate,
-        availableSlots: slotMap[seat._id.toString()] || [],
+        seatFor: seat.seatFor,
+        // Seat-level availability removed - only slot-level availability matters
+        availableSlots: availableSlots, // Slots with their individual availability
       };
 
       if (!seatsByLibrary[seat.library.toString()]) {
@@ -1927,24 +2312,29 @@ export const newGetAllLibrariesForMonthlyBooking = async (req, res) => {
       seatsByLibrary[seat.library.toString()].push(seatWithInfo);
     });
 
-    // ✅ Enrich libraries
+    //  Enrich libraries
     const enrichedLibraries = libraries.map((library) => {
       const librarySeats = seatsByLibrary[library._id.toString()] || [];
 
       if (!librarySeats.length) return null;
 
-      const nextAvailableForLibrary =
-        librarySeats
-          .map((s) => s.nextAvailableDate)
-          .filter(Boolean)
-          .sort((a, b) => a - b)[0] || null;
+      // Calculate library-level statistics based on slots
+      const allSlots = librarySeats.flatMap(seat => seat.availableSlots);
+      const availableSlotsCount = allSlots.filter(slot => slot.isAvailable).length;
+      const totalSlotsCount = allSlots.length;
+      
+      // Calculate next available date from all slots
+      const nextAvailableForLibrary = allSlots
+        .map(slot => slot.nextAvailableDate)
+        .filter(Boolean)
+        .sort((a, b) => a - b)[0] || null;
 
       return {
         ...library,
         monthlyFee: library.monthlyFee,
         seats: librarySeats,
-        availableSeatsCount: librarySeats.filter((s) => s.isAvailable).length,
-        totalSeatsCount: librarySeats.length,
+        availableSlotsCount: availableSlotsCount,
+        totalSlotsCount: totalSlotsCount,
         nextAvailableFor: nextAvailableForLibrary,
       };
     }).filter(Boolean);
@@ -1955,6 +2345,138 @@ export const newGetAllLibrariesForMonthlyBooking = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to fetch monthly booking libraries",
+      error: error.message,
+    });
+  }
+};
+
+export const newGetLibraryForMonthlyBooking = async (req, res) => {
+  try {
+    const { libraryId } = req.params;
+
+    // 🔍 Base query
+    const query = {
+      _id: libraryId,
+      isBlocked: false,
+      status: "approved",
+      monthlyFee: { $gt: 0 },
+      coordinates: { $exists: true, $ne: null },
+    };
+
+    // ✅ Find library
+    const library = await Library.findOne(query)
+      .populate("libraryType")
+      .populate("services")
+      .lean();
+
+    if (!library) {
+      return res.status(404).json({ success: false, message: "Library not found" });
+    }
+
+    // ✅ Get seats for this library
+    const monthlySeats = await Seat.find({
+      library: library._id,
+      seatFor: "monthly-booking",
+      isActive: true,
+    }).lean();
+
+    const seatIds = monthlySeats.map((s) => s._id);
+
+    // ✅ Fetch slots linked to seats
+    const slots = await TimeSlot.find({
+      library: library._id,
+      seats: { $in: seatIds },
+      isActive: true,
+      slotType: "monthly-booking",
+    })
+      .select("slotTitle startTime endTime price slotType seats _id isActive")
+      .lean();
+
+    // ✅ Get active bookings for slots
+    const activeBookings = await MonthlyBooking.find({
+      timeSlot: { $in: slots.map((s) => s._id) },
+      status: { $in: ["confirmed", "pending"] },
+    })
+      .sort({ startDate: 1 })
+      .lean();
+
+    // 🔗 Map bookings by slot
+    const slotBookingsMap = activeBookings.reduce((map, booking) => {
+      const slotId = booking.timeSlot.toString();
+      if (!map[slotId]) map[slotId] = [];
+      map[slotId].push({
+        startDate: booking.startDate,
+        endDate: booking.endDate,
+        status: booking.status,
+      });
+      return map;
+    }, {});
+
+    // 🔗 Map slots by seat
+    const slotMap = {};
+    slots.forEach((slot) => {
+      const slotBookings = slotBookingsMap[slot._id.toString()] || [];
+      const isSlotAvailable = slotBookings.length === 0;
+      const slotNextAvailableDate =
+        slotBookings.length > 0
+          ? new Date(Math.max(...slotBookings.map((b) => new Date(b.endDate).getTime())))
+          : null;
+
+      const enrichedSlot = {
+        slotTitle: slot.slotTitle,
+        from: slot.startTime,
+        to: slot.endTime,
+        price: slot.price,
+        slotType: slot.slotType,
+        _id: slot._id,
+        isActive: slot.isActive,
+        isAvailable: isSlotAvailable,
+        nextAvailableDate: slotNextAvailableDate,
+        bookings: slotBookings.map((b) => ({
+          from: b.startDate,
+          to: b.endDate,
+          status: b.status,
+        })),
+      };
+
+      slot.seats.forEach((seatId) => {
+        const sid = seatId.toString();
+        if (!slotMap[sid]) slotMap[sid] = [];
+        slotMap[sid].push(enrichedSlot);
+      });
+    });
+
+    // 🔗 Attach slots to seats
+    const librarySeats = monthlySeats.map((seat) => ({
+      _id: seat._id,
+      seatNumber: seat.seatNumber,
+      seatFor: seat.seatFor,
+      availableSlots: slotMap[seat._id.toString()] || [],
+    }));
+
+    // ✅ Library-level stats
+    const allSlots = librarySeats.flatMap((seat) => seat.availableSlots);
+    const availableSlotsCount = allSlots.filter((slot) => slot.isAvailable).length;
+    const totalSlotsCount = allSlots.length;
+    const nextAvailableForLibrary =
+      allSlots.map((slot) => slot.nextAvailableDate).filter(Boolean).sort((a, b) => a - b)[0] ||
+      null;
+
+    // ✅ Final response
+    const enrichedLibrary = {
+      ...library,
+      seats: librarySeats,
+      availableSlotsCount,
+      totalSlotsCount,
+      nextAvailableFor: nextAvailableForLibrary,
+    };
+
+    res.status(200).json({ success: true, data: enrichedLibrary });
+  } catch (error) {
+    console.error("❌ Error in newGetLibraryForMonthlyBooking:", error.message);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch library for monthly booking",
       error: error.message,
     });
   }
