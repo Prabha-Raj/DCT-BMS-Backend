@@ -30,6 +30,7 @@ import withdrawRequestRoutes from "./routes/withdrawRequestRoutes.js";
 import managePasswordRoutes from "./routes/managePasswordRoutes.js";
 import subdcriptionRoutes from "./routes/subscriptionRoutes.js";
 import paymentRoutes from "./routes/paymentRoutes.js";
+import librarySubscriptionRoutes from "./routes/librarySubscriptionRoutes.js";
 
 
 
@@ -96,6 +97,7 @@ app.use("/api/withdraw-requests", withdrawRequestRoutes);
 app.use("/api/password", managePasswordRoutes);
 app.use("/api/subscriptions", subdcriptionRoutes);
 app.use("/api/payment", paymentRoutes);
+app.use("/api/library-subscription", librarySubscriptionRoutes);
 
 
 

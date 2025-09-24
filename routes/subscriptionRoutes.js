@@ -8,7 +8,7 @@ import {
   getAllSubscriptionsForAdmin,
 
 } from "../controllers/subscriptionController.js";
-import { adminOnly, protect } from "../middleware/authMiddleware.js";
+import { adminOnly, librarianOnly, protect } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 router.post("/", protect, adminOnly, createSubscription);
